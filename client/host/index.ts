@@ -454,7 +454,7 @@ function renderCall(): void {
     url.searchParams.set('origin', location.origin)
     const frame = document.createElement('iframe')
     frame.src = url.toString()
-    frame.allow = 'camera; microphone; autoplay; fullscreen'
+    frame.allow = 'camera; microphone; autoplay; fullscreen; speaker-selection'
     frame.title = `Video call with ${activeCall.firstName}`
     els.callStage.replaceChildren(frame)
     // A call always brings you to the Live tab, wherever you were.

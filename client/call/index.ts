@@ -124,6 +124,10 @@ const els = {
   micSelect: $<HTMLSelectElement>('mic-select'),
   previewLevel: $<HTMLElement>('preview-level'),
   previewLabel: $<HTMLElement>('preview-label'),
+  previewSpeakerWrap: $<HTMLElement>('preview-speaker-wrap'),
+  previewSpeaker: $<HTMLSelectElement>('preview-speaker'),
+  previewSpeakerTest: $<HTMLButtonElement>('preview-speaker-test'),
+  previewSpeakerHint: $<HTMLElement>('preview-speaker-hint'),
   autoJoinWrap: $<HTMLElement>('auto-join-wrap'),
   autoJoin: $<HTMLInputElement>('auto-join'),
   join: $<HTMLButtonElement>('btn-join'),
@@ -139,6 +143,7 @@ const els = {
   stage: $<HTMLDivElement>('stage'),
   local: $<HTMLVideoElement>('local'),
   peerName: $<HTMLDivElement>('peer-name'),
+  peerHint: $<HTMLDivElement>('peer-hint'),
   timer: $<HTMLDivElement>('timer'),
   elapsed: $<HTMLSpanElement>('elapsed'),
   micOff: $<HTMLDivElement>('mic-off'),
@@ -146,6 +151,7 @@ const els = {
   micOffFix: $<HTMLButtonElement>('mic-off-fix'),
   controls: $<HTMLDivElement>('controls'),
   mic: $<HTMLButtonElement>('btn-mic'),
+  micLabel: $<HTMLElement>('mic-label'),
   cam: $<HTMLButtonElement>('btn-cam'),
   shareButton: $<HTMLButtonElement>('btn-share'),
   settingsButton: $<HTMLButtonElement>('btn-settings'),
@@ -180,6 +186,12 @@ let finishing = false
 let selfMuted = false
 /** The last thing the SDK said went wrong with a device, for the status line. */
 let lastMediaError: string | null = null
+/** The output device we want, applied to every audio element as it gets a stream. */
+let wantedSinkId: string | null = null
+let sinkError: string | null = null
+/** The microphone track we already tried to recover from a platform mute. */
+let recoveredTrack: MediaStreamTrack | null = null
+let watchedTrack: MediaStreamTrack | null = null
 
 // ─── Talking to whoever framed us ────────────────────────────────────────────
 
@@ -563,16 +575,67 @@ function syncSelfControls(): void {
   els.cam.setAttribute('aria-pressed', String(!videoOn))
   els.cam.setAttribute('aria-label', videoOn ? 'Turn camera off' : 'Turn camera on')
 
+  els.micLabel.textContent = audioOn ? 'Mute' : 'Unmute'
+  watchTrack(meeting.self.audioTrack ?? null)
+
   // Off without you asking for it: say so on YOUR screen. The other side only
-  // ever sees "muted", which sends them looking in the wrong place.
-  const unexpected = !audioOn && !selfMuted && !finishing
+  // ever sees "mic off", which sends them looking in the wrong place. Two
+  // cases: the SDK never got a microphone, or it has one that the platform
+  // muted underneath it — iOS does that to the earlier capture when anything
+  // captures again, and reports it as track.muted, not as "disabled".
+  const trackMuted = audioOn && selfTrackMuted()
+  const unexpected = (!audioOn && !selfMuted && !finishing) || (trackMuted && !finishing)
   els.micOff.classList.toggle('hidden', !unexpected)
   if (unexpected) {
-    els.micOffText.textContent = lastMediaError
-      ? `Your microphone is off (${lastMediaError}).`
-      : 'Your microphone is off — the other side cannot hear you.'
+    els.micOffText.textContent = trackMuted
+      ? 'Your phone muted the microphone — the other side cannot hear you.'
+      : lastMediaError
+        ? `Your microphone is off (${lastMediaError}).`
+        : 'Your microphone is off — the other side cannot hear you.'
+    els.micOffFix.textContent = trackMuted ? 'Fix microphone' : 'Turn it on'
   }
   renderAudioStatus()
+}
+
+function selfTrackMuted(): boolean {
+  const track = meeting?.self.audioTrack
+  return Boolean(track && (track.muted || track.readyState === 'ended'))
+}
+
+/** Mute/unmute/ended on our own track fire outside the SDK's events; follow them. */
+function watchTrack(track: MediaStreamTrack | null): void {
+  if (track === watchedTrack) return
+  watchedTrack = track
+  if (!track) return
+  for (const event of ['mute', 'unmute', 'ended']) {
+    track.addEventListener(event, () => {
+      if (meeting?.self.audioTrack === track) syncSelfControls()
+    })
+  }
+}
+
+/**
+ * Releases and re-acquires the microphone. The newest capture is the one a
+ * phone keeps live, so this is the fix for a track the platform muted.
+ */
+async function recoverMicrophone(): Promise<void> {
+  if (!meeting) return
+  const before = meeting.self.audioTrack ?? null
+  recoveredTrack = before
+  els.micOffFix.disabled = true
+  try {
+    await meeting.self.disableAudio()
+    await meeting.self.enableAudio()
+    lastMediaError = null
+    console.info('[call] microphone re-acquired', meeting.self.audioTrack?.label)
+  } catch (error) {
+    lastMediaError = describe(error)
+    console.warn('[call] microphone recovery failed', error)
+  } finally {
+    els.micOffFix.disabled = false
+  }
+  micMeter.attach(meeting.self.audioTrack ?? null)
+  syncSelfControls()
 }
 
 async function turnMicOn(): Promise<void> {
@@ -591,7 +654,7 @@ async function turnMicOn(): Promise<void> {
   micMeter.attach(meeting.self.audioTrack ?? null)
   syncSelfControls()
 }
-els.micOffFix.onclick = () => void turnMicOn()
+els.micOffFix.onclick = () => (meeting?.self.audioEnabled && selfTrackMuted() ? void recoverMicrophone() : void turnMicOn())
 
 /** One line each for you and for them, in the settings panel. */
 function renderAudioStatus(): void {
@@ -616,7 +679,14 @@ function renderAudioStatus(): void {
             : metersLive() && remoteMeter.level === 0
               ? 'arriving and playing (silent right now)'
               : 'arriving and playing'
-  els.audioStatus.textContent = `Your mic: ${you}. Them: ${them}.`
+  const sink = (els.remoteAudio as HTMLMediaElement & { sinkId?: string }).sinkId || wantedSinkId || ''
+  const speakerLabel = speakers.find((d) => d.deviceId === sink)?.label
+  const speaker = !canPickSpeaker
+    ? 'system default (this browser cannot choose)'
+    : sinkError
+      ? `system default — could not switch: ${sinkError}`
+      : speakerLabel ?? 'system default'
+  els.audioStatus.textContent = `Your mic: ${you}. Speaker: ${speaker}. Them: ${them}.`
 }
 
 // ─── Devices ─────────────────────────────────────────────────────────────────
@@ -645,13 +715,12 @@ async function refreshDevices(): Promise<void> {
 
     if (canPickSpeaker) {
       speakers = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput')
-      const chosen = (els.remoteAudio as HTMLMediaElement & { sinkId?: string }).sinkId || 'default'
-      fillSelect(
-        els.callSpeaker,
-        speakers.map((d) => ({ deviceId: d.deviceId, label: d.label, kind: d.kind })),
-        speakers.some((d) => d.deviceId === chosen) ? chosen : speakers[0]?.deviceId
-      )
+      const chosen = wantedSinkId ?? ((els.remoteAudio as HTMLMediaElement & { sinkId?: string }).sinkId || 'default')
+      const selected = speakers.some((d) => d.deviceId === chosen) ? chosen : speakers[0]?.deviceId
+      const options = speakers.map((d) => ({ deviceId: d.deviceId, label: d.label, kind: d.kind }))
+      for (const select of [els.callSpeaker, els.previewSpeaker]) fillSelect(select, options, selected)
       els.speakerWrap.classList.toggle('hidden', speakers.length === 0)
+      els.previewSpeakerWrap.classList.toggle('hidden', speakers.length === 0)
     }
   } catch {
     // Device labels are unavailable until permission is granted in some browsers.
@@ -704,16 +773,35 @@ async function switchDevice(devices: RtkDevice[], deviceId: string, remember = t
   syncSelfControls()
 }
 
+type Sinkable = HTMLMediaElement & { sinkId?: string; setSinkId?(id: string): Promise<void> }
+
 async function switchSpeaker(deviceId: string, remember = true): Promise<void> {
-  const sinkable = [els.remoteAudio, els.shareAudio] as Array<HTMLMediaElement & { setSinkId?(id: string): Promise<void> }>
+  wantedSinkId = deviceId
+  for (const select of [els.callSpeaker, els.previewSpeaker]) select.value = deviceId
+  const chosen = speakers.find((d) => d.deviceId === deviceId)
+  if (remember && chosen) savePrefs({ audiooutput: { id: chosen.deviceId, label: chosen.label } })
+  await Promise.all(([els.remoteAudio, els.shareAudio] as Sinkable[]).map((element) => applySink(element)))
+  const hint = sinkError ? `Could not switch speaker: ${sinkError}` : ''
+  els.settingsHint.textContent = hint
+  els.previewSpeakerHint.textContent = hint
+  renderAudioStatus()
+}
+
+/**
+ * Points one audio element at the wanted output. Called on every stream
+ * attach as well as on a pick, because a sink set before an element had a
+ * stream did not survive in every browser — which is how a call opened on
+ * the headset after the desk speaker had been chosen.
+ */
+async function applySink(element: Sinkable): Promise<void> {
+  if (!wantedSinkId || typeof element.setSinkId !== 'function') return
+  if (element.sinkId === wantedSinkId) return
   try {
-    await Promise.all(sinkable.map((element) => element.setSinkId?.(deviceId)))
-    els.settingsHint.textContent = ''
-    els.callSpeaker.value = deviceId
-    const chosen = speakers.find((d) => d.deviceId === deviceId)
-    if (remember && chosen) savePrefs({ audiooutput: { id: chosen.deviceId, label: chosen.label } })
+    await element.setSinkId(wantedSinkId)
+    sinkError = null
   } catch (error) {
-    els.settingsHint.textContent = `Could not switch speaker: ${describe(error)}`
+    sinkError = describe(error)
+    console.warn('[call] setSinkId failed', wantedSinkId, error)
   }
 }
 
@@ -722,6 +810,14 @@ els.micSelect.onchange = () => void switchDevice(microphones, els.micSelect.valu
 els.callCam.onchange = () => void switchDevice(cameras, els.callCam.value)
 els.callMic.onchange = () => void switchDevice(microphones, els.callMic.value)
 els.callSpeaker.onchange = () => void switchSpeaker(els.callSpeaker.value)
+els.previewSpeaker.onchange = () => void switchSpeaker(els.previewSpeaker.value)
+els.previewSpeakerTest.onclick = async () => {
+  els.previewSpeakerTest.disabled = true
+  els.previewSpeakerTest.textContent = 'Playing…'
+  const result = await playTestTone(els.previewSpeaker.value)
+  els.previewSpeakerTest.textContent = result === 'played' ? 'Heard it? Test again' : 'Could not play'
+  els.previewSpeakerTest.disabled = false
+}
 els.callSpeakerTest.onclick = async () => {
   // Rings the chosen output, on top of the call, so the answer is "that one".
   els.callSpeakerTest.disabled = true
@@ -806,7 +902,14 @@ async function join(): Promise<void> {
 
 function reconcileAudio(): void {
   if (!meeting) return
-  micMeter.attach(meeting.self.audioEnabled ? (meeting.self.audioTrack ?? null) : null)
+  const own = meeting.self.audioTrack ?? null
+  if (meeting.self.audioEnabled && own && selfTrackMuted() && recoveredTrack !== own) {
+    // First sight of a platform-muted track: fix it without asking. If the
+    // new track is muted too, the banner and its button take over.
+    void recoverMicrophone()
+    return
+  }
+  micMeter.attach(meeting.self.audioEnabled ? own : null)
   const peer = remoteParticipant
   if (peer) {
     const track = peer.audioEnabled === false ? null : (peer.audioTrack ?? null)
@@ -825,6 +928,11 @@ function labelPeer(participant: RtkParticipant): void {
   const muted = participant.audioEnabled === false
   els.peerName.textContent = muted ? `${name} · mic off` : name
   els.remoteLevelLabel.textContent = muted ? `${name} (mic off)` : `${name} — what is arriving`
+  // Their screen shows a banner with the fix; this is what to say out loud.
+  els.peerHint.textContent = muted
+    ? `${name}'s microphone is off on their side. Ask them to tap the red "Turn it on" / "Fix microphone" button at the top of their screen, or "Unmute" at the bottom.`
+    : ''
+  els.peerHint.classList.toggle('hidden', !muted)
 }
 
 function wireParticipants(): void {
@@ -863,6 +971,7 @@ function wireParticipants(): void {
     playRemoteAudio(null)
     remoteMeter.detach()
     showRemoteShare(null)
+    els.peerHint.classList.add('hidden')
     // Not the end of the call: the server's reconnect window decides that. A
     // dropped connection on a train should not hang up on someone.
     showWaitingForPeer(true)
@@ -918,6 +1027,7 @@ function playInto(element: HTMLMediaElement, track: MediaStreamTrack | null): vo
     return
   }
   element.srcObject = new MediaStream([track])
+  void applySink(element as Sinkable)
   console.info(`[call] playing ${element.id}`, track.label || track.id)
   element.play().catch(() => {
     // Refused: the browser wants a gesture on THIS document first. The Join

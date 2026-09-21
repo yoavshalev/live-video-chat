@@ -136,6 +136,7 @@ export function register(app: Hono<AppEnv>): void {
         <video id="share" class="share hidden" autoplay playsinline muted></video>
         <video id="local" class="local hidden" autoplay playsinline muted></video>
         <div id="peer-name" class="peer-name hidden"></div>
+        <div id="peer-hint" class="peer-hint hidden" role="status"></div>
         <div id="share-pill" class="share-pill hidden">You are sharing your screen</div>
         <!-- The other side's AUDIO. The core SDK hands over a raw audio track and
              plays nothing itself — registerVideoElement attaches video only. A call
@@ -210,6 +211,14 @@ export function register(app: Hono<AppEnv>): void {
                      possible answer to "is my mic working?" before anyone joins. -->
                 <div class="level-row"><span id="preview-label" class="tiny muted">Say something</span><div class="level"><i id="preview-level"></i></div></div>
               </div>
+              <div id="preview-speaker-wrap" class="hidden">
+                <label for="preview-speaker">Speaker</label>
+                <div class="row">
+                  <select id="preview-speaker" style="flex:1;min-width:0"></select>
+                  <button id="preview-speaker-test" class="btn-ghost" type="button">Test</button>
+                </div>
+                <div id="preview-speaker-hint" class="tiny muted"></div>
+              </div>
               <!-- Agents only (shown from the client): skip this screen next time. -->
               <label id="auto-join-wrap" class="check tiny muted hidden"><input id="auto-join" type="checkbox" /> Skip this check next time and join right away (this browser)</label>
             </div>
@@ -232,16 +241,20 @@ export function register(app: Hono<AppEnv>): void {
       <div class="controls" id="controls" hidden>
         <button id="btn-mic" class="ctrl" type="button" aria-label="Mute microphone" aria-pressed="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+          <span id="mic-label" class="ctrl-label">Mute</span>
         </button>
         <button id="btn-cam" class="ctrl" type="button" aria-label="Turn camera off" aria-pressed="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <span class="ctrl-label">Camera</span>
         </button>
         <!-- Hidden on browsers without getDisplayMedia (every mobile browser). -->
         <button id="btn-share" class="ctrl hidden" type="button" aria-label="Share your screen" aria-pressed="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 13V8M9 11l3-3 3 3"/></svg>
+          <span class="ctrl-label">Share</span>
         </button>
         <button id="btn-settings" class="ctrl" type="button" aria-label="Audio and video settings" aria-expanded="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg>
+          <span class="ctrl-label">Settings</span>
         </button>
         <button id="btn-leave" class="ctrl end" type="button">End call</button>
       </div>

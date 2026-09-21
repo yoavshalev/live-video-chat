@@ -403,12 +403,21 @@ body { background: #000; overflow: hidden; }
   background: #0d0e11; border-top: 1px solid var(--border);
 }
 .ctrl {
-  width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--surface-2); border: 1px solid var(--border); padding: 0;
+  min-width: 58px; height: 56px; border-radius: 14px; display: grid; place-items: center; gap: 3px;
+  grid-template-rows: auto auto; background: var(--surface-2); border: 1px solid var(--border); padding: 0 8px;
 }
+.ctrl-label { font-size: 10px; line-height: 1; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .ctrl.off { background: var(--danger); border-color: var(--danger); color: #2a0503; }
-.ctrl.end { width: auto; border-radius: 999px; padding: 0 20px; background: var(--danger); border-color: var(--danger); color: #2a0503; font-weight: 600; }
+.ctrl.off .ctrl-label { color: #2a0503; font-weight: 700; }
+.ctrl.end { grid-template-rows: auto; border-radius: 999px; padding: 0 20px; background: var(--danger); border-color: var(--danger); color: #2a0503; font-weight: 600; }
 .ctrl svg { width: 20px; height: 20px; }
+
+/* The other person's microphone is off: what to tell them, right under their name. */
+.peer-hint {
+  position: absolute; bottom: 46px; left: 12px; z-index: 2; max-width: min(420px, calc(100% - 24px));
+  background: rgba(255,90,82,.16); backdrop-filter: blur(8px); color: #fff;
+  border: 1px solid rgba(255,90,82,.55); border-radius: 10px; padding: 8px 12px; font-size: 13px; line-height: 1.4;
+}
 
 .timer {
   position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 12px; z-index: 4;
@@ -449,6 +458,15 @@ body { background: #000; overflow: hidden; }
   border: 1px solid rgba(255,90,82,.55); border-radius: 999px; padding: 6px 8px 6px 14px; font-size: 13px;
 }
 .mic-off .btn-primary { padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+/* On a phone the banner is the most important thing on the screen: full
+   width, big words, a button a thumb cannot miss. */
+@media (max-width: 520px) {
+  .mic-off {
+    left: 12px; right: 12px; transform: none; max-width: none; border-radius: 14px;
+    flex-direction: column; align-items: stretch; text-align: center; padding: 12px 14px; font-size: 15px; line-height: 1.35;
+  }
+  .mic-off .btn-primary { padding: 12px 18px; font-size: 16px; }
+}
 .error-box {
   border: 1px solid rgba(255,90,82,.45); background: rgba(255,90,82,.08);
   border-radius: 10px; padding: 12px; font-size: 14px; text-align: left;

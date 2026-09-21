@@ -1164,7 +1164,7 @@ class Widget {
       class: 'call-frame',
       attrs: {
         src: url.toString(),
-        allow: 'camera; microphone; autoplay; fullscreen',
+        allow: 'camera; microphone; autoplay; fullscreen; speaker-selection',
         title: `Video call with ${this.name()}`
       }
     })

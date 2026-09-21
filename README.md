@@ -410,12 +410,19 @@ mic: on — Shure MVX2U. Them: arriving and playing"). The mute button reflects
 what the SDK actually has, not what was asked for: a microphone the browser
 refused, or that iOS handed over silent, shows as **off** on that person's own
 screen with a one-tap "Turn it on", instead of only as "mic off" on the other
-side.
+side. A phone that mutes the capture underneath the SDK (iOS does, whenever
+anything captures again) is caught by watching the track itself: the
+microphone is re-acquired once automatically, and if that is not enough a
+full-width "Fix microphone" banner does it on a tap. The other side is told
+what to ask for. The controls carry labels — Mute / Unmute, Camera, Share,
+Settings — so the button is never a guess on a phone.
 
 **Device defaults.** The camera, microphone and speaker you pick — under the
 dashboard's *Audio & video settings*, which also rings the chosen speaker so
-you can tell it is the right one, or inside a call — are remembered per
-browser and used for every call after that. Agents can also tick *skip this check next
+you can tell it is the right one, on the pre-call check, or inside a call —
+are remembered per browser and used for every call after that; the chosen
+speaker is re-applied every time audio is attached, and a browser that
+refuses the switch says so in the status line. Agents can also tick *skip this check next
 time* to join the moment their devices are up. Nothing is stored on the
 server: a device id only means something to the browser that issued it.
 
