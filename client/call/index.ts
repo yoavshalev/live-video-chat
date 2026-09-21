@@ -123,6 +123,7 @@ const els = {
   cameraSelect: $<HTMLSelectElement>('camera-select'),
   micSelect: $<HTMLSelectElement>('mic-select'),
   previewLevel: $<HTMLElement>('preview-level'),
+  previewLabel: $<HTMLElement>('preview-label'),
   autoJoinWrap: $<HTMLElement>('auto-join-wrap'),
   autoJoin: $<HTMLInputElement>('auto-join'),
   join: $<HTMLButtonElement>('btn-join'),
@@ -159,6 +160,7 @@ const els = {
   callSpeaker: $<HTMLSelectElement>('call-speaker'),
   callSpeakerTest: $<HTMLButtonElement>('call-speaker-test'),
   micLevel: $<HTMLElement>('mic-level'),
+  micLevelLabel: $<HTMLElement>('mic-level-label'),
   remoteLevel: $<HTMLElement>('remote-level'),
   remoteLevelLabel: $<HTMLElement>('remote-level-label'),
   autoJoinCallWrap: $<HTMLElement>('auto-join-call-wrap'),
@@ -328,11 +330,31 @@ function context(): AudioContext | null {
   } catch {
     return null
   }
+  audioContext.onstatechange = () => {
+    syncMeterLabels()
+    renderAudioStatus()
+  }
   return audioContext
 }
 
 function resumeAudio(): void {
   if (audioContext?.state === 'suspended') void audioContext.resume().catch(() => {})
+}
+
+/**
+ * Whether the meters can hear anything at all. Until a gesture lands in THIS
+ * frame the context stays suspended on autoplay-strict browsers (iOS Safari
+ * above all), the analyser reads zeros, and a bar that says "silent" would be
+ * lying about a microphone that is fine. Every reading is qualified by this.
+ */
+function metersLive(): boolean {
+  return audioContext?.state === 'running'
+}
+
+function syncMeterLabels(): void {
+  const live = metersLive()
+  els.previewLabel.textContent = live ? 'Say something' : 'Tap anywhere in this window to start the meter'
+  els.micLevelLabel.textContent = live ? 'You — say something' : 'You — tap to start the meter'
 }
 window.addEventListener('pointerdown', resumeAudio, { capture: true })
 window.addEventListener('keydown', resumeAudio, { capture: true })
@@ -458,6 +480,7 @@ async function setup(): Promise<void> {
   await refreshDevices()
   await applyRememberedDevices()
   micMeter.attach(meeting.self.audioTrack ?? null)
+  syncMeterLabels()
   syncSelfControls()
 
   els.join.classList.remove('hidden')
@@ -575,7 +598,7 @@ function renderAudioStatus(): void {
   if (!meeting) return
   const mic = meeting.self.getCurrentDevices().audio?.label
   const you = meeting.self.audioEnabled
-    ? `on${mic ? ` — ${mic}` : ''}${micMeter.level === 0 && joined ? ' (nothing heard yet — say something)' : ''}`
+    ? `on${mic ? ` — ${mic}` : ''}${!metersLive() ? ' (meter starts after a tap in the call)' : micMeter.level === 0 && joined ? ' (nothing heard yet — say something)' : ''}`
     : selfMuted
       ? 'muted by you'
       : `OFF — ${lastMediaError ?? 'the browser did not hand over a microphone'}`
@@ -590,7 +613,7 @@ function renderAudioStatus(): void {
           ? 'on, but no audio has arrived yet'
           : els.remoteAudio.paused
             ? 'arriving, but playback is blocked — use "Tap to hear"'
-            : remoteMeter.level === 0
+            : metersLive() && remoteMeter.level === 0
               ? 'arriving and playing (silent right now)'
               : 'arriving and playing'
   els.audioStatus.textContent = `Your mic: ${you}. Them: ${them}.`

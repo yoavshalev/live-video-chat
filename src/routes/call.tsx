@@ -166,7 +166,7 @@ export function register(app: Hono<AppEnv>): void {
           <div>
             <label for="call-mic">Microphone</label>
             <select id="call-mic"></select>
-            <div class="level-row"><span class="tiny muted">You — say something</span><div class="level"><i id="mic-level"></i></div></div>
+            <div class="level-row"><span id="mic-level-label" class="tiny muted">You — say something</span><div class="level"><i id="mic-level"></i></div></div>
           </div>
           <div id="speaker-wrap" class="hidden">
             <label for="call-speaker">Speaker</label>
@@ -208,7 +208,7 @@ export function register(app: Hono<AppEnv>): void {
                 <select id="mic-select"></select>
                 <!-- Moves when the chosen microphone hears you. The cheapest
                      possible answer to "is my mic working?" before anyone joins. -->
-                <div class="level-row"><span class="tiny muted">Say something</span><div class="level"><i id="preview-level"></i></div></div>
+                <div class="level-row"><span id="preview-label" class="tiny muted">Say something</span><div class="level"><i id="preview-level"></i></div></div>
               </div>
               <!-- Agents only (shown from the client): skip this screen next time. -->
               <label id="auto-join-wrap" class="check tiny muted hidden"><input id="auto-join" type="checkbox" /> Skip this check next time and join right away (this browser)</label>

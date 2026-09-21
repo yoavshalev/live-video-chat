@@ -17,9 +17,18 @@ import { existsSync, readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
+// `--config file`, `--config=file` and `-c file` all mean the same thing to
+// wrangler, so they do here too; everything else is passed through untouched.
 const args = process.argv.slice(2)
-const at = args.indexOf('--config')
-const config = at >= 0 ? args[at + 1] : 'wrangler.jsonc'
+let config = 'wrangler.jsonc'
+const passthrough = []
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i]
+  const inline = arg.match(/^(?:--config|-c)=(.+)$/)
+  if (inline) config = inline[1]
+  else if (arg === '--config' || arg === '-c') config = args[++i] ?? ''
+  else passthrough.push(arg)
+}
 
 function fail(message) {
   console.error(`\n${message}\n`)
@@ -51,4 +60,4 @@ run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check'], { shell:
 // wrangler itself, without a shell, so arguments arrive exactly as given.
 const wrangler = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url))
 if (!existsSync(wrangler)) fail('wrangler is not installed — run npm install first.')
-run(process.execPath, [wrangler, 'deploy', ...(at >= 0 ? args : ['--config', config, ...args])])
+run(process.execPath, [wrangler, 'deploy', '--config', config, ...passthrough])
