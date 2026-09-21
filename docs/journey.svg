@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="j-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#8b93a3"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="330" rx="18" fill="#0f1218"/>
+  <text x="40" y="46" fill="#8b93a3" font-size="13" letter-spacing="1.5" font-weight="600">WHAT A VISITOR SEES</text>
+
+  <!-- Five steps -->
+  <g fill="#161a22" stroke="#2a3040">
+    <rect x="40" y="70" width="200" height="150" rx="12"/>
+    <rect x="276" y="70" width="200" height="150" rx="12"/>
+    <rect x="512" y="70" width="200" height="150" rx="12"/>
+    <rect x="748" y="70" width="200" height="150" rx="12"/>
+    <rect x="984" y="70" width="176" height="150" rx="12" stroke="#4fd27f"/>
+  </g>
+  <g stroke="#8b93a3" stroke-width="1.5" fill="none" marker-end="url(#j-arrow)">
+    <path d="M240 145 L 274 145"/>
+    <path d="M476 145 L 510 145"/>
+    <path d="M712 145 L 746 145"/>
+    <path d="M948 145 L 982 145"/>
+  </g>
+
+  <!-- 1: the bubble -->
+  <rect x="62" y="92" width="150" height="34" rx="17" fill="#1d2330" stroke="#2a3040"/>
+  <circle cx="82" cy="109" r="5" fill="#4fd27f"/>
+  <text x="94" y="114" fill="#e8eaf0" font-size="13" font-weight="600">Talk to Dana</text>
+  <text x="62" y="160" fill="#e8eaf0" font-size="16" font-weight="700">Sees the bubble</text>
+  <text x="62" y="184" fill="#8b93a3" font-size="13">on any of your sites,</text>
+  <text x="62" y="202" fill="#8b93a3" font-size="13">the moment someone is live</text>
+
+  <!-- 2: the form -->
+  <g fill="#1d2330" stroke="#2a3040">
+    <rect x="298" y="90" width="156" height="14" rx="4"/>
+    <rect x="298" y="110" width="156" height="14" rx="4"/>
+  </g>
+  <text x="304" y="101" fill="#8b93a3" font-size="10">Alex</text>
+  <text x="304" y="121" fill="#8b93a3" font-size="10">Can I embed the report?</text>
+  <text x="298" y="160" fill="#e8eaf0" font-size="16" font-weight="700">Asks to talk</text>
+  <text x="298" y="184" fill="#8b93a3" font-size="13">a name and a question;</text>
+  <text x="298" y="202" fill="#8b93a3" font-size="13">no account, nothing to install</text>
+
+  <!-- 3: waiting -->
+  <text x="534" y="118" fill="#e8eaf0" font-size="30" font-weight="700">2</text>
+  <text x="556" y="118" fill="#8b93a3" font-size="13">people ahead · ~5 min</text>
+  <text x="534" y="160" fill="#e8eaf0" font-size="16" font-weight="700">Waits in line</text>
+  <text x="534" y="184" fill="#8b93a3" font-size="13">one queue across all sites;</text>
+  <text x="534" y="202" fill="#8b93a3" font-size="13">keeps their place on a refresh</text>
+
+  <!-- 4: invitation -->
+  <circle cx="790" cy="108" r="18" fill="none" stroke="#4fd27f" stroke-width="3" stroke-dasharray="85 28" transform="rotate(-90 790 108)"/>
+  <text x="790" y="113" fill="#e8eaf0" font-size="12" font-weight="700" text-anchor="middle">47</text>
+  <text x="818" y="113" fill="#8b93a3" font-size="13">seconds to join</text>
+  <text x="770" y="160" fill="#e8eaf0" font-size="16" font-weight="700">Is invited</text>
+  <text x="770" y="184" fill="#8b93a3" font-size="13">by the next free agent —</text>
+  <text x="770" y="202" fill="#8b93a3" font-size="13">round-robin, or by hand</text>
+
+  <!-- 5: the call -->
+  <rect x="1006" y="90" width="132" height="34" rx="6" fill="#0b2f1c" stroke="#4fd27f"/>
+  <circle cx="1024" cy="107" r="6" fill="#4fd27f"/>
+  <text x="1036" y="111" fill="#e8eaf0" font-size="12" font-weight="600">Dana · 03:12</text>
+  <text x="1006" y="160" fill="#e8eaf0" font-size="16" font-weight="700">Talks, in the page</text>
+  <text x="1006" y="184" fill="#8b93a3" font-size="13">private 1:1 video, screen</text>
+  <text x="1006" y="202" fill="#8b93a3" font-size="13">share, mic and speaker checks</text>
+
+  <!-- Agent side -->
+  <text x="40" y="266" fill="#8b93a3" font-size="13" letter-spacing="1.5" font-weight="600">WHAT AN AGENT SEES</text>
+  <text x="40" y="294" fill="#c9cdd6" font-size="14">One dashboard for the whole team: who is waiting and from which site, a chime while someone waits and you are free,</text>
+  <text x="40" y="314" fill="#c9cdd6" font-size="14">your own call in the middle, colleagues' status in the sidebar, an inbox of every request and message.</text>
+</svg>

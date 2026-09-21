@@ -116,7 +116,7 @@ export class MediaSurface {
     this.mode = mode
     this.lastFocused = document.activeElement as HTMLElement | null
     this.els.modal.classList.remove('hidden')
-    this.els.title.textContent = mode === 'record' ? 'Record your intro clip' : 'Camera and microphone'
+    this.els.title.textContent = mode === 'record' ? 'Record your intro clip' : 'Audio and video settings'
     this.els.hint.textContent =
       mode === 'record'
         ? `Aim for 5–15 seconds. It loops silently in the widget, so lead with your face, not a sentence that needs sound.`

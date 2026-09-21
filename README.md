@@ -14,6 +14,11 @@ R2 and [RealtimeKit](https://developers.cloudflare.com/realtime/realtimekit/)
 for the WebRTC media. No servers, no third-party SaaS, no media passes through
 your code.
 
+![Architecture: widgets and dashboards connect over WebSockets to one Durable Object, which uses D1, KV and R2; media goes browser to RealtimeKit directly](docs/architecture.svg)
+
+<details>
+<summary>The same picture as text</summary>
+
 ```
 widget on any site ──ws──┐
 agent dashboards ───ws───┼──▶ LiveHostRoom (one Durable Object)
@@ -25,6 +30,38 @@ waiting visitors ───ws───┘        │
 
 /call (same-origin iframe) ──────▶ WebRTC, peer to Cloudflare's edge
 ```
+
+</details>
+
+## See it
+
+The dashboard while two people wait — one from each site — and two agents are live:
+
+![The Live tab: metrics, "You're live" with Accept next, the queue with each visitor's site and question, and the agents panel](docs/screenshots/dashboard-live.png)
+
+What a visitor sees on your site, from the first click to their place in line:
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/widget-live.png" alt="The widget open on a customer site: 'Live now', the intro clip area, 'Dana is live' and a 'Talk to Dana' button"></td>
+    <td width="33%"><img src="docs/screenshots/widget-form.png" alt="The join form: name, email, what to talk about"></td>
+    <td width="33%"><img src="docs/screenshots/widget-waiting.png" alt="In line: #1, 'You're next', keep this tab open"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Someone is live</sub></td>
+    <td align="center"><sub>Asking to talk</sub></td>
+    <td align="center"><sub>Waiting, with a place in line</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="60%" valign="top"><img src="docs/screenshots/widget-offline.png" alt="The offline state: a leave-a-message form"><br><sub>Nobody live: a message form instead (or nothing at all — per site)</sub></td>
+    <td width="40%" valign="top"><img src="docs/screenshots/widget-mobile.png" alt="On a phone the widget is a bottom sheet" width="320"><br><sub>On a phone: a bottom sheet with a chevron to dismiss</sub></td>
+  </tr>
+</table>
+
+![The visitor's journey: sees the bubble, asks to talk, waits in line, is invited, talks in the page; and what the agent sees](docs/journey.svg)
 
 ## What you get
 
@@ -373,6 +410,17 @@ so the widget never talks to anything else.
 | **Clip** | Record or upload the intro loop; device check. |
 | **Inbox** | Every join request and offline message ever submitted, with who took the call. |
 | **Agents** | The team, roles, add / disable / reset password; your own password. |
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dashboard-embed.png" alt="The Embed tab: how domains work, add a site, each site's domains, wording, offline behaviour and snippet"></td>
+    <td width="50%"><img src="docs/screenshots/dashboard-agents.png" alt="The Agents tab: change your password, add an agent, the team with roles and status"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Embed: sites, domains, per-site settings, the snippet</sub></td>
+    <td align="center"><sub>Agents: the team, roles, passwords</sub></td>
+  </tr>
+</table>
 
 **Alerts.** While somebody is waiting and *you* are available, the dashboard
 rings a chime every 20 seconds, flashes the tab title, and — if you allowed

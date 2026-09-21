@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8b93a3"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#4fd27f"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="560" rx="18" fill="#0f1218"/>
+
+  <!-- Websites -->
+  <text x="40" y="52" fill="#8b93a3" font-size="13" letter-spacing="1.5" font-weight="600">YOUR WEBSITES</text>
+  <g fill="#161a22" stroke="#2a3040">
+    <rect x="40" y="70" width="230" height="64" rx="10"/>
+    <rect x="40" y="150" width="230" height="64" rx="10"/>
+    <rect x="40" y="230" width="230" height="64" rx="10"/>
+  </g>
+  <g fill="#e8eaf0" font-size="16" font-weight="600">
+    <text x="60" y="97">example.com</text>
+    <text x="60" y="177">shop.example.com</text>
+    <text x="60" y="257">help.example.org</text>
+  </g>
+  <g fill="#8b93a3" font-size="13">
+    <text x="60" y="119">one script tag · the widget</text>
+    <text x="60" y="199">subdomains covered by the root</text>
+    <text x="60" y="279">a second site, same queue</text>
+  </g>
+
+  <!-- Agent dashboards -->
+  <text x="40" y="360" fill="#8b93a3" font-size="13" letter-spacing="1.5" font-weight="600">AGENT DASHBOARDS</text>
+  <rect x="40" y="378" width="230" height="110" rx="10" fill="#161a22" stroke="#2a3040"/>
+  <circle cx="66" cy="408" r="5" fill="#4fd27f"/><text x="80" y="413" fill="#e8eaf0" font-size="15">Dana — available</text>
+  <circle cx="66" cy="436" r="5" fill="#f5b942"/><text x="80" y="441" fill="#e8eaf0" font-size="15">Ariel — in a call</text>
+  <circle cx="66" cy="464" r="5" fill="#8b93a3"/><text x="80" y="469" fill="#8b93a3" font-size="15">Sam — offline</text>
+
+  <!-- WebSocket arrows into the room -->
+  <g stroke="#8b93a3" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+    <path d="M270 102 C 340 102, 340 180, 420 180"/>
+    <path d="M270 182 L 420 182"/>
+    <path d="M270 262 C 340 262, 340 184, 420 184"/>
+    <path d="M270 433 C 350 433, 350 200, 420 190"/>
+  </g>
+  <text x="300" y="150" fill="#8b93a3" font-size="12">WebSockets</text>
+  <text x="300" y="330" fill="#8b93a3" font-size="12">WebSockets</text>
+
+  <!-- The room -->
+  <rect x="420" y="70" width="380" height="230" rx="14" fill="#151b26" stroke="#4fd27f" stroke-width="1.5"/>
+  <text x="444" y="104" fill="#4fd27f" font-size="13" letter-spacing="1.5" font-weight="600">CLOUDFLARE WORKER</text>
+  <text x="444" y="136" fill="#e8eaf0" font-size="20" font-weight="700">One Durable Object</text>
+  <g fill="#c9cdd6" font-size="15">
+    <text x="444" y="168">presence across every site</text>
+    <text x="444" y="192">one FIFO queue, round-robin to agents</text>
+    <text x="444" y="216">invitations with a 60 s countdown</text>
+    <text x="444" y="240">hibernates between events; one alarm</text>
+  </g>
+  <text x="444" y="278" fill="#8b93a3" font-size="13">A pure reducer decides; the object only persists, broadcasts and times.</text>
+
+  <!-- Storage -->
+  <g stroke="#8b93a3" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+    <path d="M500 300 L 500 350"/>
+    <path d="M610 300 L 610 350"/>
+    <path d="M720 300 L 720 350"/>
+  </g>
+  <g fill="#161a22" stroke="#2a3040">
+    <rect x="440" y="352" width="120" height="70" rx="10"/>
+    <rect x="550" y="352" width="120" height="70" rx="10"/>
+    <rect x="660" y="352" width="120" height="70" rx="10"/>
+  </g>
+  <g fill="#e8eaf0" font-size="16" font-weight="600" text-anchor="middle">
+    <text x="500" y="380">D1</text>
+    <text x="610" y="380">KV</text>
+    <text x="720" y="380">R2</text>
+  </g>
+  <g fill="#8b93a3" font-size="12" text-anchor="middle">
+    <text x="500" y="401">agents, sites,</text><text x="500" y="415">history, inbox</text>
+    <text x="610" y="401">rate limits</text>
+    <text x="720" y="401">the intro clip</text>
+  </g>
+
+  <!-- RealtimeKit -->
+  <path d="M800 185 L 880 185" stroke="#8b93a3" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="806" y="172" fill="#8b93a3" font-size="12">only when a</text>
+  <text x="806" y="204" fill="#8b93a3" font-size="12">call is accepted</text>
+  <rect x="882" y="120" width="278" height="130" rx="14" fill="#161a22" stroke="#2a3040"/>
+  <text x="906" y="152" fill="#8b93a3" font-size="13" letter-spacing="1.5" font-weight="600">REALTIMEKIT</text>
+  <text x="906" y="182" fill="#e8eaf0" font-size="18" font-weight="700">WebRTC media</text>
+  <text x="906" y="208" fill="#c9cdd6" font-size="14">one meeting per call,</text>
+  <text x="906" y="228" fill="#c9cdd6" font-size="14">exactly two participant tokens</text>
+
+  <!-- Media path: browsers to the edge, never through the Worker -->
+  <g stroke="#4fd27f" stroke-width="2" stroke-dasharray="6 6" fill="none" marker-end="url(#arrow-green)">
+    <path d="M150 300 C 150 520, 900 520, 1000 252"/>
+    <path d="M155 494 C 400 540, 900 540, 1020 252"/>
+  </g>
+  <text x="640" y="500" fill="#4fd27f" font-size="13" text-anchor="middle" font-weight="600">camera and microphone go browser → Cloudflare's edge; no media byte passes through the Worker</text>
+</svg>
