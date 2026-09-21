@@ -5,7 +5,7 @@
  * the dashboard (host), with `allow="camera; microphone"`. That is what keeps the
  * promise of never leaving the website while also keeping a megabyte of WebRTC
  * SDK off the embedding site's page — the iframe is ours, so the SDK, the styles
- * and the media permissions all belong to this origin, not to PingBell's.
+ * and the media permissions all belong to this origin, not to the customer's.
  *
  * The same URL also works opened top-level, which is the fallback when a browser
  * refuses camera access inside a cross-origin frame. That fallback is the reason

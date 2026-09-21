@@ -2,8 +2,8 @@
  * The widget's stylesheet, injected into a shadow root.
  *
  * Isolation is the whole point. Inside a shadow root nothing the embedding site
- * declares reaches these rules and nothing here escapes, so PingBell's reset and
- * SYQEL's dark theme cannot break the widget and the widget cannot break them.
+ * declares reaches these rules and nothing here escapes, so a customer's CSS reset
+ * and another's dark theme cannot break the widget and the widget cannot break them.
  * That is also why there is no `:root` here and no global selectors — `:host` is
  * the boundary.
  *
