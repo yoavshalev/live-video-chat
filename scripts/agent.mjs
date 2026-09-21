@@ -26,7 +26,8 @@ import { webcrypto as crypto } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const PBKDF2_ITERATIONS = 300_000
+// The most the Workers runtime will verify; see src/lib/password.ts.
+export const PBKDF2_ITERATIONS = 100_000
 
 function b64url(bytes) {
   return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')

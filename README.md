@@ -241,7 +241,8 @@ node scripts/agent.mjs disable  --email ada@example.com [--remote]
 node scripts/agent.mjs enable   --email ada@example.com [--remote]
 ```
 
-Passwords are stored as PBKDF2-SHA256 (300 000 iterations, per-user salt); the
+Passwords are stored as PBKDF2-SHA256 (100 000 iterations — the most the
+Workers runtime allows — with a per-user salt); the
 CLI and the Worker produce and verify the same format, which
 `test/password.test.ts` proves.
 

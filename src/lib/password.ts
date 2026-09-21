@@ -5,18 +5,26 @@
  *
  * PBKDF2-SHA256 rather than bcrypt/scrypt/argon2 because it is what WebCrypto
  * offers natively — no dependency, no WASM, and the Worker never has to import
- * anything to verify a login. 300k iterations is within the CPU budget of a
- * Worker request and well above the current OWASP floor; the login route is
- * rate-limited to 8 attempts per IP per 15 minutes on top of that.
+ * anything to verify a login.
+ *
+ * 100 000 iterations, because that is the most the Workers runtime allows:
+ * deriveBits with a higher PBKDF2 count throws in production (local workerd
+ * does not enforce it, so a higher number looks fine right up until the first
+ * real login fails). It is the OWASP-recommended minimum for SHA-256 as of
+ * 2023, and the login route is rate-limited to 8 attempts per IP per 15
+ * minutes on top of it.
  *
  * Stored form: pbkdf2$<iterations>$<salt b64url>$<hash b64url>
- * The iteration count is in the string so it can be raised later without
- * invalidating existing hashes.
+ * The iteration count is in the string so it can be changed later without
+ * invalidating existing hashes — as long as it stays within what the runtime
+ * can verify.
  */
 
 import { base64url, base64urlDecode, timingSafeEqual } from './security'
 
-export const PBKDF2_ITERATIONS = 300_000
+export const PBKDF2_ITERATIONS = 100_000
+/** What the Workers runtime will actually run. A stored hash above this can never verify there. */
+export const PBKDF2_MAX_ITERATIONS = 100_000
 const SALT_BYTES = 16
 const KEY_BITS = 256
 
@@ -44,13 +52,20 @@ export async function verifyPassword(stored: string | null | undefined, password
   const parts = stored.split('$')
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
   const iterations = Number.parseInt(parts[1] ?? '', 10)
-  if (!Number.isFinite(iterations) || iterations < 1000 || iterations > 5_000_000) return false
+  if (!Number.isFinite(iterations) || iterations < 1000) return false
+  if (iterations > PBKDF2_MAX_ITERATIONS) {
+    // Refusing loudly rather than throwing quietly: this is a stored hash the
+    // runtime cannot check, and the fix is `scripts/agent.mjs password`.
+    console.error(`[password] stored hash uses ${iterations} iterations; the runtime allows ${PBKDF2_MAX_ITERATIONS}`)
+    return false
+  }
   try {
     const salt = base64urlDecode(parts[2] ?? '')
     const expected = parts[3] ?? ''
     const actual = base64url(await derive(password, salt, iterations))
     return timingSafeEqual(actual, expected)
-  } catch {
+  } catch (error) {
+    console.error('[password] verification failed', error instanceof Error ? error.message : String(error))
     return false
   }
 }

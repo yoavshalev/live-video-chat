@@ -1198,6 +1198,13 @@ class Widget {
         return
       case 'ended':
         this.send(clientMsg('CALL_END', { commandId: commandId(), reason: 'visitor_left' }))
+        // Leave the call screen now rather than when the server confirms. If
+        // the socket happens to be down, the confirmation never comes, and a
+        // visitor who pressed End must not be left staring at the call.
+        this.call = null
+        this.position = null
+        this.setView('ended')
+        this.emit('callended', { reason: 'visitor_left' })
         return
       case 'iframe-blocked':
         this.iframeFallback = true

@@ -403,6 +403,21 @@ body { background: #000; overflow: hidden; }
 }
 
 .device-row { display: grid; gap: 8px; width: 100%; text-align: left; }
+
+/* Level meters: a bar that moves with sound. Green for you, blue for them. */
+.level-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; margin-top: 6px; }
+.level { height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.level i { display: block; height: 100%; width: 0; background: var(--live); border-radius: inherit; transition: width 80ms linear; }
+.level.remote i { background: var(--accent); }
+
+/* In-call settings panel, docked above the controls. */
+.settings {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 7;
+  width: min(380px, calc(100% - 24px)); display: grid; gap: 12px; text-align: left;
+  background: rgba(13,14,17,.96); backdrop-filter: blur(10px);
+  border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: var(--shadow);
+}
+.settings select { width: 100%; }
 .error-box {
   border: 1px solid rgba(255,90,82,.45); background: rgba(255,90,82,.08);
   border-radius: 10px; padding: 12px; font-size: 14px; text-align: left;

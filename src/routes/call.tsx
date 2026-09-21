@@ -134,6 +134,34 @@ export function register(app: Hono<AppEnv>): void {
         <audio id="share-audio" autoplay></audio>
         <!-- Shown only if the browser refuses to start audio without a gesture. -->
         <button id="btn-hear" class="hear hidden" type="button">Tap to hear</button>
+
+        <!-- In-call audio and video settings. Both sides get this, because "I
+             can't hear you" is fixed on whichever side has the wrong device, and
+             the meters say which side that is. -->
+        <div id="settings" class="settings hidden" role="dialog" aria-label="Audio and video settings">
+          <div class="between">
+            <strong>Audio &amp; video</strong>
+            <button id="settings-close" class="btn-ghost" type="button">Done</button>
+          </div>
+          <div>
+            <label for="call-mic">Microphone</label>
+            <select id="call-mic"></select>
+            <div class="level-row"><span class="tiny muted">You — say something</span><div class="level"><i id="mic-level"></i></div></div>
+          </div>
+          <div id="speaker-wrap" class="hidden">
+            <label for="call-speaker">Speaker</label>
+            <select id="call-speaker"></select>
+          </div>
+          <div>
+            <div class="level-row"><span class="tiny muted" id="remote-level-label">Them</span><div class="level remote"><i id="remote-level"></i></div></div>
+            <p class="tiny muted" style="margin:6px 0 0">If their bar moves and you hear nothing, change your speaker. If it stays flat, they need to check their microphone.</p>
+          </div>
+          <div>
+            <label for="call-cam">Camera</label>
+            <select id="call-cam"></select>
+          </div>
+          <p id="settings-hint" class="tiny muted" style="margin:0"></p>
+        </div>
         <div id="timer" class="timer hidden"><span class="dot busy" aria-hidden="true"></span><span id="elapsed" class="mono">0:00</span></div>
 
         <!-- The AV check. Camera and microphone are requested HERE and nowhere
@@ -154,6 +182,9 @@ export function register(app: Hono<AppEnv>): void {
               <div>
                 <label for="mic-select">Microphone</label>
                 <select id="mic-select"></select>
+                <!-- Moves when the chosen microphone hears you. The cheapest
+                     possible answer to "is my mic working?" before anyone joins. -->
+                <div class="level-row"><span class="tiny muted">Say something</span><div class="level"><i id="preview-level"></i></div></div>
               </div>
             </div>
 
@@ -182,6 +213,9 @@ export function register(app: Hono<AppEnv>): void {
         <!-- Hidden on browsers without getDisplayMedia (every mobile browser). -->
         <button id="btn-share" class="ctrl hidden" type="button" aria-label="Share your screen" aria-pressed="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 13V8M9 11l3-3 3 3"/></svg>
+        </button>
+        <button id="btn-settings" class="ctrl" type="button" aria-label="Audio and video settings" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg>
         </button>
         <button id="btn-leave" class="ctrl end" type="button">End call</button>
       </div>
