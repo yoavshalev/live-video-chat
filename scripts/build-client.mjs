@@ -26,7 +26,9 @@ const outDir = join(root, 'src', 'generated')
 /** Budgets in bytes of minified output. Exceeding one fails the build. */
 const ENTRIES = [
   { name: 'widget', entry: 'client/widget/index.ts', budget: 52_000 },
-  { name: 'host', entry: 'client/host/index.ts', budget: 40_000 },
+  // Raised from 40k when the dashboard was split into modules: the boundaries
+  // cost ~1 KB and bought a file per tab.
+  { name: 'host', entry: 'client/host/index.ts', budget: 42_000 },
   { name: 'call', entry: 'client/call/index.ts', budget: 30_000 }
 ]
 

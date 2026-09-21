@@ -496,7 +496,7 @@ The smoke suites take `[baseUrl] [password] [email]` and refuse a non-localhost
 target unless you add `--disruptive`: they take agents offline, drive the queue
 and create a throwaway site, which disconnects anyone using the deployment.
 
-`src/shared/machine.ts` is a pure reducer — `(state, command) → {state, effects}`
+`src/shared/machine/` is a pure reducer — `(state, command) → {state, effects}`
 with no I/O, no clock and no randomness; `now` and every generated id arrive on
 the command — so the whole product lifecycle, including three agents and two
 concurrent calls, runs in milliseconds under test. The Durable Object is a shell
@@ -586,21 +586,28 @@ src/
   index.ts                  Worker entry; route registration
   config.ts                 every tunable number and every visitor-facing string
   types.ts                  bindings and D1 row shapes
-  durable/LiveHostRoom.ts   the one coordinator: sockets, alarms, broadcasts
+  durable/
+    LiveHostRoom.ts         the one coordinator: sockets, alarms, broadcasts
+    commands.ts             socket message → command, where identity is enforced
+    tokens.ts, signatures.ts  call tokens; "did anything change?" digests
   shared/
     protocol.ts             the wire format, shared with client/
-    machine.ts              the pure reducer — read this first
+    machine/                the pure reducer — read this first
+      types.ts              state, commands and effects
+      transitions.ts        one function per state change
+      reduce.ts             the command switch
+      views.ts              read-only projections for the wire
     domains.ts              the domain allow-list rules
     validation.ts           inbound parsing and sanitisation
-  routes/                   host (dashboard + agent APIs), api, ws, call, media
-  lib/                      auth, password, sites, db, realtimekit, ratelimit, analytics
-  ui/styles.ts              dashboard and call page CSS
+  routes/                   api, ws, call, media, and host/ (dashboard: one file per tab)
+  lib/                      auth, access, csrf, password, sites, db/, realtimekit, ratelimit, analytics
+  ui/styles/                dashboard and call page CSS
 
 client/
-  widget/                   the embeddable widget (shadow DOM, no framework)
-  host/                     dashboard hydration, alerts, recorder
-  call/                     RealtimeKit call UI
-  shared/                   reconnecting WebSocket, chime
+  widget/                   the embeddable widget (shadow DOM, no framework); views/ = one file per screen
+  host/                     the dashboard: one file per tab, plus socket, alerts, recorder
+  call/                     the call page: devices, meters, microphone, peer, lifecycle
+  shared/                   reconnecting WebSocket, device prefs, test tone
 
 migrations/   D1 schema, applied in order
 seed/         example sites (any environment) and the dev admin (local only)

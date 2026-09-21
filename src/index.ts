@@ -21,7 +21,8 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from './types'
-import { agentIdentity, rejectCrossSiteWrites } from './lib/auth'
+import { agentIdentity } from './lib/auth'
+import { rejectCrossSiteWrites } from './lib/csrf'
 
 import * as health from './routes/health'
 import * as widget from './routes/widget'

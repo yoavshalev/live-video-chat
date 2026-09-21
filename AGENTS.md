@@ -12,11 +12,18 @@ README explains the product and the setup; this file is about not breaking it.
 ## Where things are
 
 ```
-src/shared/machine.ts      the state machine — a PURE reducer, (state, command) → {state, effects}
-src/durable/LiveHostRoom.ts the one Durable Object: sockets, alarms, effects
-src/routes/                 HTTP routes, one file per group
-src/lib/                    auth, password, sites, db, realtimekit, ratelimit
-client/widget, host, call   browser bundles (esbuild → src/generated, never edited by hand)
+src/shared/machine/        the state machine — a PURE reducer, (state, command) → {state, effects}
+                             types.ts (state + commands), transitions.ts (one function per change),
+                             reduce.ts (the switch), views.ts (read-only projections)
+src/durable/               the one Durable Object. LiveHostRoom.ts owns sockets, alarms and effects;
+                             commands.ts turns a socket message into a command (identity checks live here)
+src/routes/                HTTP routes, one file per group; routes/host/ is the dashboard (tabs/ = one file per tab)
+src/lib/                   auth, access (Cloudflare Access), csrf, password, sites, db/ (one file per table group),
+                             realtimekit, ratelimit
+src/ui/styles/             CSS for the dashboard and the call page
+client/widget, host, call  browser bundles (esbuild → src/generated, never edited by hand).
+                             Each is an index.ts that wires small modules: widget/views/ is one file per screen,
+                             host/ is one file per dashboard tab, call/ is one file per concern (devices, meters, peer…)
 test/                       vitest; test/machine.test.ts is the one that matters most
 scripts/                    agent CLI, build, deploy preflight, smoke suites
 ```
@@ -35,12 +42,13 @@ npm run deploy -- --config wrangler.<name>.local.jsonc
 ## Rules that are easy to break
 
 - **The reducer stays pure.** No `Date.now()`, no random ids, no I/O inside
-  `src/shared/machine.ts`; `now` and `ids` arrive on the command. Every new
+  `src/shared/machine/`; `now` and `ids` arrive on the command. Every new
   transition gets a test in `test/machine.test.ts`. The Durable Object only
   persists, broadcasts, sets the single alarm and applies effects.
 - **Identity comes from the socket, never the payload.** A message's `callId`
   or `visitorId` is checked against what the socket's attachment says, as
-  `CALL_END` and `CALL_MEDIA_*` in `LiveHostRoom.ts` do.
+  `CALL_END` and `CALL_MEDIA_*` in `src/durable/commands.ts` do (tested in
+  `test/commands.test.ts`).
 - **`wrangler.jsonc` is a template.** Real account ids, D1/KV ids and
   hostnames live only in a gitignored `wrangler.*.local.jsonc`. Never commit
   them, and never put a secret in `vars`. `scripts/deploy.mjs` refuses

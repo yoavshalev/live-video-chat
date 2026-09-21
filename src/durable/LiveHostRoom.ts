@@ -8,11 +8,12 @@
  * serialized answer to "who is next, and whose turn is it to take them" can live.
  *
  * This class is deliberately a shell. All decisions are made by the pure reducer
- * in src/shared/machine.ts; what happens here is I/O:
+ * in src/shared/machine; what happens here is I/O:
  *   - persist state after every command
- *   - decide who needs to be told what changed
+ *   - decide who needs to be told what changed (./signatures.ts)
  *   - schedule the single alarm that drives every timeout
  *   - talk to RealtimeKit and D1
+ * Messages become commands in ./commands.ts, which is pure and tested on its own.
  *
  * HIBERNATION: sockets are accepted with `ctx.acceptWebSocket`, not `ws.accept`,
  * so an idle room costs nothing while hundreds of widgets stay connected. Three
@@ -31,6 +32,7 @@ import { DEFAULT_SETTINGS, type RoomSettings } from '../config'
 import {
   activeCallViews,
   agentViews,
+  callFor,
   deriveStatus,
   initialState,
   isCurrentState,
@@ -40,6 +42,7 @@ import {
   queueEntryView,
   reduce,
   selfView,
+  type CallRecord,
   type Command,
   type Effect,
   type Ids,
@@ -58,26 +61,13 @@ import { applyDbOp, getHostProfile, safeDb } from '../lib/db'
 import { provisionCall, realtimeCredentials, releaseMeeting } from '../lib/realtimekit'
 import { recordEvent } from '../lib/analytics'
 import { randomId, randomSecret, timingSafeEqual } from '../lib/security'
+import { commandFromMessage } from './commands'
+import { dashboardSignature, orderSignature, presenceSignature } from './signatures'
+import { tokensKey, type CallTokens, type RedeemResult } from './tokens'
+
+export type { RedeemResult } from './tokens'
 
 const STATE_KEY = 'room_state'
-const tokensKey = (callId: string) => `call_tokens:${callId}`
-
-/** Media credentials for one call. Never leaves the object except through redeemCall. */
-interface CallTokens {
-  meetingId: string
-  hostToken: string
-  visitorToken: string
-  hostParticipantId: string
-  visitorParticipantId: string
-}
-
-export interface RedeemResult {
-  ok: boolean
-  error?: string
-  meetingId?: string
-  authToken?: string
-  displayName?: string
-}
 
 export class LiveHostRoom extends DurableObject<Env> {
   private profileCache: { value: HostProfileView; expires: number } | null = null
@@ -178,30 +168,12 @@ export class LiveHostRoom extends DurableObject<Env> {
     return ids
   }
 
-  // ─── Change detection ──────────────────────────────────────────────────────
-  //
-  // Rather than making the reducer remember to emit "and tell the widgets", the
-  // shell diffs before and after. A transition can never forget to broadcast,
-  // and a no-op command can never produce a spurious one.
-
-  private presenceSignature(state: RoomState): string {
-    const view = presenceView(state, this.settings())
-    return `${view.status}|${view.queueLength}|${view.liveSince ?? 0}|${view.agentsLive}|${view.averageCallSeconds ?? -1}`
-  }
-
-  private dashboardSignature(state: RoomState): string {
-    const queue = state.queue.map((e) => `${e.visitorId}:${e.status}:${e.assignedTo ?? ''}:${e.connected ? 1 : 0}`).join(',')
-    const agents = Object.values(state.agents)
-      .map((a) => `${a.id}:${a.intent}:${a.connections > 0 ? 1 : 0}:${state.invites[a.id]?.visitorId ?? ''}`)
-      .join(',')
-    const calls = Object.values(state.calls)
-      .map((c) => `${c.callId}:${c.status}:${c.hostPresent ? 1 : 0}${c.visitorPresent ? 1 : 0}`)
-      .join(',')
-    return `${queue}#${agents}#${calls}#${state.assignment}`
-  }
-
-  private orderSignature(state: RoomState): string {
-    return state.queue.map((e) => e.visitorId).join(',')
+  /** The caller's own call, found from the socket's identity — never from a payload. */
+  private async ownCall(attachment: SocketAttachment): Promise<CallRecord | undefined> {
+    const state = await this.load()
+    if (attachment.role === 'host' && attachment.agentId) return state.calls[attachment.agentId]
+    if (attachment.visitorId) return callFor(state, attachment.visitorId)
+    return undefined
   }
 
   // ─── The dispatch loop ─────────────────────────────────────────────────────
@@ -214,7 +186,8 @@ export class LiveHostRoom extends DurableObject<Env> {
    */
   private async dispatch(command: Command): Promise<RoomState> {
     const before = await this.load()
-    const { state: after, effects } = reduce(before, command, this.settings())
+    const settings = this.settings()
+    const { state: after, effects } = reduce(before, command, settings)
 
     if (after !== before) await this.ctx.storage.put(STATE_KEY, after)
 
@@ -223,10 +196,10 @@ export class LiveHostRoom extends DurableObject<Env> {
     for (const effect of effects) this.applyEffect(effect)
 
     const now = Date.now()
-    if (this.presenceSignature(before) !== this.presenceSignature(after)) {
-      this.sendAll(serverMsg('PRESENCE_UPDATE', presenceView(after, this.settings()), now))
+    if (presenceSignature(before, settings) !== presenceSignature(after, settings)) {
+      this.sendAll(serverMsg('PRESENCE_UPDATE', presenceView(after, settings), now))
     }
-    if (this.dashboardSignature(before) !== this.dashboardSignature(after)) {
+    if (dashboardSignature(before) !== dashboardSignature(after)) {
       this.sendTo(
         'role:host',
         serverMsg('QUEUE_UPDATE', { queue: after.queue.map(queueEntryView), agents: agentViews(after), calls: activeCallViews(after) }, now)
@@ -234,9 +207,9 @@ export class LiveHostRoom extends DurableObject<Env> {
     }
     // Only when the *order* changes does everyone's position change. A visitor
     // reconnecting must not spam the whole line with position updates.
-    if (this.orderSignature(before) !== this.orderSignature(after)) {
+    if (orderSignature(before) !== orderSignature(after)) {
       for (const entry of after.queue) {
-        const position = positionView(after, entry.visitorId, this.settings(), now)
+        const position = positionView(after, entry.visitorId, settings, now)
         if (position) this.sendTo(`v:${entry.visitorId}`, serverMsg('QUEUE_POSITION_UPDATE', position, now))
       }
     }
@@ -502,130 +475,16 @@ export class LiveHostRoom extends DurableObject<Env> {
       this.send(ws, serverMsg('ERROR', { code: 'invalid_payload', message: parsed.reason }))
       return
     }
-    const message = parsed.message
-    if (message.type === 'HEARTBEAT') return
 
-    const now = Date.now()
-    const agentId = attachment.role === 'host' ? attachment.agentId : undefined
-    const visitorId = attachment.visitorId
-
-    // Authority comes from the socket's own attachment, set at upgrade time after
-    // the Worker authenticated the request. A payload claiming to be an agent is
-    // just a payload.
-    const asAgent = (): string | null => {
-      if (agentId) return agentId
-      this.send(ws, serverMsg('ERROR', { code: 'unauthorized', message: 'agents only' }))
-      return null
-    }
-
-    switch (message.type) {
-      case 'HOST_GO_LIVE': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'HOST_GO_LIVE', now, commandId: message.payload.commandId, agentId: id, ids: this.idPool() })
-        return
-      }
-      case 'HOST_GO_OFFLINE': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'HOST_GO_OFFLINE', now, commandId: message.payload.commandId, agentId: id, ids: this.idPool() })
-        return
-      }
-      case 'HOST_PAUSE': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'HOST_PAUSE', now, commandId: message.payload.commandId, agentId: id })
-        return
-      }
-      case 'HOST_RESUME': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'HOST_RESUME', now, commandId: message.payload.commandId, agentId: id, ids: this.idPool() })
-        return
-      }
-      case 'HOST_SET_ASSIGNMENT': {
-        if (!asAgent()) return
-        await this.dispatch({ t: 'HOST_SET_ASSIGNMENT', now, commandId: message.payload.commandId, mode: message.payload.mode, ids: this.idPool() })
-        return
-      }
-      case 'CALL_ACCEPT_NEXT': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'ACCEPT_NEXT', now, commandId: message.payload.commandId, agentId: id, ids: this.idPool(1) })
-        return
-      }
-      case 'CALL_ACCEPT_VISITOR': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'ACCEPT_VISITOR', now, commandId: message.payload.commandId, agentId: id, visitorId: message.payload.visitorId, ids: this.idPool(1) })
-        return
-      }
-      case 'CALL_DECLINE_VISITOR': {
-        const id = asAgent(); if (!id) return
-        await this.dispatch({ t: 'DECLINE_VISITOR', now, commandId: message.payload.commandId, agentId: id, visitorId: message.payload.visitorId, ids: this.idPool() })
-        return
-      }
-      case 'CALL_END': {
-        // Either side may hang up, but only their OWN call. The call is looked up
-        // from the socket's identity, never from the payload.
-        const state = await this.load()
-        const call = agentId
-          ? state.calls[agentId]
-          : visitorId
-            ? Object.values(state.calls).find((c) => c.visitorId === visitorId)
-            : undefined
-        if (!call) {
-          this.send(ws, serverMsg('ERROR', { code: 'no_active_call', message: 'There is no call to end.', commandId: message.payload.commandId }))
-          return
-        }
-        await this.dispatch({
-          t: 'CALL_END', now, commandId: message.payload.commandId, callId: call.callId,
-          reason: agentId ? 'host_ended' : 'visitor_left', ids: this.idPool()
-        })
-        return
-      }
-
-      case 'QUEUE_JOIN': {
-        if (!visitorId || !attachment.siteId) {
-          this.send(ws, serverMsg('ERROR', { code: 'unauthorized', message: 'no visitor identity' }))
-          return
-        }
-        const p = message.payload
-        await this.dispatch({
-          t: 'QUEUE_JOIN', now, commandId: p.commandId, visitorId, queueEntryId: randomId('qs'),
-          firstName: p.firstName, email: p.email ?? null, company: p.company ?? null, question: p.question ?? null,
-          // siteId comes from the socket, which the Worker validated against the
-          // Origin header. The payload does not get a vote.
-          siteId: attachment.siteId, pageUrl: p.pageUrl, pageTitle: p.pageTitle ?? null, referrer: p.referrer ?? null,
-          ids: this.idPool()
-        })
-        return
-      }
-      case 'QUEUE_LEAVE':
-        if (!visitorId) return
-        await this.dispatch({ t: 'QUEUE_LEAVE', now, commandId: message.payload.commandId, visitorId, ids: this.idPool() })
-        return
-      case 'VISITOR_ACCEPT_INVITE':
-        if (!visitorId) return
-        await this.dispatch({ t: 'VISITOR_ACCEPT_INVITE', now, commandId: message.payload.commandId, visitorId })
-        return
-      case 'VISITOR_DECLINE_INVITE':
-        if (!visitorId) return
-        await this.dispatch({ t: 'VISITOR_DECLINE_INVITE', now, commandId: message.payload.commandId, visitorId, ids: this.idPool() })
-        return
-      case 'CALL_MEDIA_JOINED':
-      case 'CALL_MEDIA_LEFT': {
-        // Your OWN call only, found from the socket's identity; the payload's
-        // callId has to agree with it. Otherwise any dashboard could mark
-        // another agent's call as connected, or start its disconnect clock.
-        const state = await this.load()
-        const call = agentId
-          ? state.calls[agentId]
-          : visitorId
-            ? Object.values(state.calls).find((c) => c.visitorId === visitorId)
-            : undefined
-        if (!call || call.callId !== message.payload.callId) return
-        await this.dispatch({
-          t: message.type === 'CALL_MEDIA_JOINED' ? 'MEDIA_JOINED' : 'MEDIA_LEFT',
-          now, callId: call.callId, who: agentId ? 'host' : 'visitor'
-        })
-        return
-      }
-    }
+    const outcome = await commandFromMessage({
+      message: parsed.message,
+      attachment,
+      now: Date.now(),
+      idPool: (size) => this.idPool(size),
+      ownCall: () => this.ownCall(attachment)
+    })
+    if (outcome.kind === 'command') await this.dispatch(outcome.command)
+    else if (outcome.kind === 'error') this.send(ws, serverMsg('ERROR', { code: outcome.code, message: outcome.message, commandId: outcome.commandId }))
   }
 
   override async webSocketClose(ws: WebSocket, _code: number, _reason: string, _clean: boolean): Promise<void> {
