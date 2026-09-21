@@ -33,6 +33,7 @@
  */
 
 import { loadPrefs, pickRemembered, savePrefs } from '../shared/prefs'
+import { playTestTone } from '../shared/tone'
 
 interface Boot {
   callId: string
@@ -156,6 +157,7 @@ const els = {
   callCam: $<HTMLSelectElement>('call-cam'),
   speakerWrap: $<HTMLDivElement>('speaker-wrap'),
   callSpeaker: $<HTMLSelectElement>('call-speaker'),
+  callSpeakerTest: $<HTMLButtonElement>('call-speaker-test'),
   micLevel: $<HTMLElement>('mic-level'),
   remoteLevel: $<HTMLElement>('remote-level'),
   remoteLevelLabel: $<HTMLElement>('remote-level-label'),
@@ -697,6 +699,14 @@ els.micSelect.onchange = () => void switchDevice(microphones, els.micSelect.valu
 els.callCam.onchange = () => void switchDevice(cameras, els.callCam.value)
 els.callMic.onchange = () => void switchDevice(microphones, els.callMic.value)
 els.callSpeaker.onchange = () => void switchSpeaker(els.callSpeaker.value)
+els.callSpeakerTest.onclick = async () => {
+  // Rings the chosen output, on top of the call, so the answer is "that one".
+  els.callSpeakerTest.disabled = true
+  els.callSpeakerTest.textContent = 'Playing…'
+  const result = await playTestTone(els.callSpeaker.value)
+  els.callSpeakerTest.textContent = result === 'played' ? 'Test again' : 'Could not play'
+  els.callSpeakerTest.disabled = false
+}
 navigator.mediaDevices?.addEventListener?.('devicechange', () => void refreshDevices())
 
 for (const box of [els.autoJoin, els.autoJoinCall]) {

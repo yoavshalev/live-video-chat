@@ -170,7 +170,10 @@ export function register(app: Hono<AppEnv>): void {
           </div>
           <div id="speaker-wrap" class="hidden">
             <label for="call-speaker">Speaker</label>
-            <select id="call-speaker"></select>
+            <div class="row">
+              <select id="call-speaker" style="flex:1;min-width:0"></select>
+              <button id="call-speaker-test" class="btn-ghost" type="button">Test</button>
+            </div>
           </div>
           <div>
             <div class="level-row"><span class="tiny muted" id="remote-level-label">Them</span><div class="level remote"><i id="remote-level"></i></div></div>

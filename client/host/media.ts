@@ -56,6 +56,9 @@ interface Els {
   levelBar: HTMLElement
   cameraSelect: HTMLSelectElement
   micSelect: HTMLSelectElement
+  speakerWrap: HTMLElement
+  speakerSelect: HTMLSelectElement
+  speakerTest: HTMLButtonElement
   error: HTMLElement
   timer: HTMLElement
   record: HTMLButtonElement
@@ -73,6 +76,7 @@ export interface MediaSurfaceOptions {
 }
 
 import { loadPrefs, pickRemembered, savePrefs } from '../shared/prefs'
+import { canPickOutput, playTestTone } from '../shared/tone'
 
 export class MediaSurface {
   private stream: MediaStream | null = null
@@ -101,6 +105,8 @@ export class MediaSurface {
     els.sound.onclick = () => this.toggleSound()
     els.cameraSelect.onchange = () => void this.restart()
     els.micSelect.onchange = () => void this.restart()
+    els.speakerSelect.onchange = () => this.rememberSpeaker()
+    els.speakerTest.onclick = () => void this.testSpeakers()
     els.modal.addEventListener('keydown', (event) => {
       if ((event as KeyboardEvent).key === 'Escape') this.close()
     })
@@ -114,7 +120,7 @@ export class MediaSurface {
     this.els.hint.textContent =
       mode === 'record'
         ? `Aim for 5–15 seconds. It loops silently in the widget, so lead with your face, not a sentence that needs sound.`
-        : 'Check your framing, your light and your levels before you go live. The camera and microphone you pick here are used for every call on this browser.'
+        : 'Pick the devices every call on this browser will use. Say something and watch the level; press Test to hear which speaker rings.'
     this.setError('')
     this.showRecorded(false)
     this.els.record.classList.toggle('hidden', mode !== 'record')
@@ -200,9 +206,35 @@ export class MediaSurface {
       }
       fill(this.els.cameraSelect, devices.filter((d) => d.kind === 'videoinput'), current.video)
       fill(this.els.micSelect, devices.filter((d) => d.kind === 'audioinput'), current.audio)
+      if (canPickOutput) {
+        const outputs = devices.filter((d) => d.kind === 'audiooutput')
+        const remembered = pickRemembered(outputs, loadPrefs().audiooutput)
+        fill(this.els.speakerSelect, outputs, remembered?.deviceId ?? outputs.find((d) => d.deviceId === 'default')?.deviceId)
+        this.els.speakerWrap.classList.toggle('hidden', outputs.length === 0)
+      }
     } catch {
       /* the pickers stay empty; the default device still works */
     }
+  }
+
+  private rememberSpeaker(): void {
+    const option = this.els.speakerSelect.selectedOptions[0]
+    if (option && this.els.speakerSelect.value) {
+      savePrefs({ audiooutput: { id: this.els.speakerSelect.value, label: option.textContent ?? '' } })
+    }
+  }
+
+  /** Rings the chosen output. The button says what happened, since "nothing" is the informative outcome. */
+  private async testSpeakers(): Promise<void> {
+    const button = this.els.speakerTest
+    button.disabled = true
+    button.textContent = 'Playing…'
+    const result = await playTestTone(this.els.speakerSelect.value)
+    button.textContent = result === 'played' ? 'Heard it? Test again' : result === 'default-output' ? 'Played on the system default' : 'Could not play'
+    button.disabled = false
+    setTimeout(() => {
+      button.textContent = 'Test'
+    }, 4000)
   }
 
   private async restart(): Promise<void> {

@@ -410,9 +410,10 @@ refused, or that iOS handed over silent, shows as **off** on that person's own
 screen with a one-tap "Turn it on", instead of only as "mic off" on the other
 side.
 
-**Device defaults.** The camera, microphone and speaker you pick — on the
-dashboard's *Check camera* or inside a call — are remembered per browser and
-used for every call after that. Agents can also tick *skip this check next
+**Device defaults.** The camera, microphone and speaker you pick — under the
+dashboard's *Audio & video settings*, which also rings the chosen speaker so
+you can tell it is the right one, or inside a call — are remembered per
+browser and used for every call after that. Agents can also tick *skip this check next
 time* to join the moment their devices are up. Nothing is stored on the
 server: a device id only means something to the browser that issued it.
 

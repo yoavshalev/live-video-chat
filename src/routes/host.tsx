@@ -319,7 +319,7 @@ export function register(app: Hono<AppEnv>): void {
                 <!-- Alert sound. A repeating chime while somebody waits and you are
                      free. Persisted per browser; see client/host/alerts.ts. -->
                 <button id="btn-sound" class="btn-ghost" type="button" aria-pressed="true" title="Chime while someone is waiting">Sound on</button>
-                <button id="btn-check" class="btn-ghost" type="button">Check camera</button>
+                <button id="btn-check" class="btn-ghost" type="button">Audio &amp; video settings</button>
                 <button id="btn-pause" class="btn-ghost hidden" type="button">Pause new requests</button>
                 <button id="btn-live" class="btn-live" type="button" disabled>Go live</button>
                 ${c.env.HOST_AUTH_MODE === 'access' ? '' : html`<form method="post" action="/host/logout"><button class="btn-ghost" type="submit">Sign out</button></form>`}
@@ -585,7 +585,7 @@ export function register(app: Hono<AppEnv>): void {
           <div id="media-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="media-title">
             <div class="modal-card">
               <div class="between">
-                <h2 id="media-title">Camera and microphone</h2>
+                <h2 id="media-title">Audio and video settings</h2>
                 <button id="media-close" class="btn-ghost" type="button">Close</button>
               </div>
               <p id="media-hint" class="small muted" style="margin:0"></p>
@@ -602,6 +602,16 @@ export function register(app: Hono<AppEnv>): void {
               <div class="device-grid">
                 <div><label for="media-camera">Camera</label><select id="media-camera"></select></div>
                 <div><label for="media-mic">Microphone</label><select id="media-mic"></select></div>
+                <!-- Output. Hidden where the browser cannot direct sound at a
+                     device (Safari); "Test" rings the chosen one so a headset
+                     left on the desk is found before a call, not during it. -->
+                <div id="media-speaker-wrap" class="hidden" style="grid-column: 1 / -1">
+                  <label for="media-speaker">Speaker</label>
+                  <div class="row">
+                    <select id="media-speaker" style="flex:1;min-width:0"></select>
+                    <button id="media-speaker-test" class="btn-ghost" type="button">Test</button>
+                  </div>
+                </div>
               </div>
               <div id="media-error" class="error-box hidden" role="alert"></div>
               <div class="row" style="justify-content:flex-end;flex-wrap:wrap">
