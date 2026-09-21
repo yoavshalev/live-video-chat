@@ -419,6 +419,8 @@ async function setup(): Promise<void> {
   }
 
   els.preview.classList.remove('hidden')
+  // Lays the overlay out around the preview (beside the pickers on a wide stage).
+  els.overlay.classList.add('setup')
   // `true` marks this as a local preview that is not published to the room.
   meeting.self.registerVideoElement(els.preview, true)
   await refreshDevices()
@@ -737,6 +739,7 @@ function showWaitingForPeer(waiting: boolean): void {
     return
   }
   els.overlay.classList.remove('hidden')
+  els.overlay.classList.remove('setup')
   clearError()
   els.preview.classList.add('hidden')
   els.devices.classList.add('hidden')
@@ -830,6 +833,7 @@ async function finish(type: 'ended' | 'left'): Promise<void> {
   showRemoteShare(null)
 
   clearError()
+  els.overlay.classList.remove('setup')
   els.preview.classList.add('hidden')
   els.devices.classList.add('hidden')
   els.join.classList.add('hidden')

@@ -190,7 +190,7 @@ export function register(app: Hono<AppEnv>): void {
 
             <div id="overlay-error" class="error-box hidden"></div>
 
-            <div class="row" style="justify-content:center;flex-wrap:wrap">
+            <div id="overlay-actions" class="actions">
               <button id="btn-join" class="btn-primary hidden" type="button">Join the call</button>
               <button id="btn-retry" class="btn-ghost hidden" type="button">Try again</button>
               <!-- Without this a failed call is a dead end: the widget hides its

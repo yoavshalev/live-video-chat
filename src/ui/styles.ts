@@ -234,7 +234,7 @@ header.top {
 .badge.invited { color: var(--busy); border-color: rgba(255,176,32,.4); }
 .badge.away { color: var(--danger); border-color: rgba(255,90,82,.4); }
 
-.call-stage { position: relative; background: #000; border-radius: var(--radius); overflow: hidden; aspect-ratio: 16 / 10; }
+.call-stage { position: relative; background: #000; border-radius: var(--radius); overflow: hidden; height: clamp(460px, 72vh, 820px); }
 .call-stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
 .empty { padding: 26px 14px; text-align: center; color: var(--muted); font-size: 14px; }
@@ -348,7 +348,7 @@ body { background: #000; overflow: hidden; }
   /* Your own preview is a mirror; anything else is disorienting to look at. */
   transform: scaleX(-1);
 }
-.local.setup { position: static; width: 100%; max-width: none; aspect-ratio: 16/10; border-radius: 12px; }
+.local.setup { position: static; width: 100%; max-width: none; aspect-ratio: 16 / 9; border-radius: 12px; }
 
 /* Screen share. The share takes the stage; the sharer's camera becomes a tile
    in the top-right so their face stays on screen while they point at things. */
@@ -371,10 +371,30 @@ body { background: #000; overflow: hidden; }
 }
 
 .overlay {
-  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  position: absolute; inset: 0; display: flex; flex-direction: column; text-align: center;
   padding: 24px; background: radial-gradient(60% 60% at 50% 40%, #16181d 0%, #0a0b0d 100%); z-index: 3;
+  /* Taller than the stage? Scroll from the top rather than centring and cutting
+     the top of the preview off. `margin: auto` on .inner centres when it fits. */
+  overflow: auto;
 }
-.overlay .inner { max-width: 420px; width: 100%; display: grid; gap: 14px; justify-items: center; }
+.overlay .inner { max-width: 420px; width: 100%; display: grid; gap: 14px; justify-items: center; margin: auto; }
+.overlay .actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; }
+/* The camera check: the preview is the point, so it gets the room. */
+.overlay.setup .inner { max-width: 620px; }
+@media (min-width: 680px) {
+  .overlay.setup .inner {
+    max-width: 960px; gap: 10px 20px; text-align: left; justify-items: stretch; align-items: start;
+    grid-template-columns: minmax(0, 3fr) minmax(230px, 2fr);
+    grid-template-areas: "preview title" "preview body" "preview devices" "preview error" "preview actions" "preview .";
+    grid-template-rows: auto auto auto auto auto 1fr;
+  }
+  .overlay.setup #overlay-title { grid-area: title; margin: 0; }
+  .overlay.setup #overlay-body { grid-area: body; }
+  .overlay.setup #preview { grid-area: preview; align-self: center; }
+  .overlay.setup #device-row { grid-area: devices; }
+  .overlay.setup #overlay-error { grid-area: error; }
+  .overlay.setup .actions { grid-area: actions; justify-content: flex-start; }
+}
 .avatar-lg { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
 
 .controls {
