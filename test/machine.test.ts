@@ -93,7 +93,7 @@ function goLive(room: Room, agentId: string, now = 1_000): Room {
   return room.run({ t: 'HOST_GO_LIVE', now, commandId: `live-${agentId}-${now}`, agentId, ids: ids() })
 }
 
-function join(room: Room, visitorId: string, now: number, siteId = 'example'): Room {
+function join(room: Room, visitorId: string, now: number, siteId = 'example', email: string | null = null): Room {
   return room
     .run({ t: 'VISITOR_CONNECT', now, visitorId })
     .run({
@@ -103,7 +103,7 @@ function join(room: Room, visitorId: string, now: number, siteId = 'example'): R
       visitorId,
       queueEntryId: `qs-${visitorId}`,
       firstName: visitorId.toUpperCase(),
-      email: null,
+      email,
       company: null,
       question: 'Can I use this for my newsletter?',
       siteId,
@@ -594,6 +594,39 @@ describe('calls', () => {
     room.run({ t: 'TICK', now: retryAt, ids: ids() })
     expect(room.invitedBy('ben')).toBe('alice')
     expect(room.types()).toContain('provision_call')
+  })
+
+  it('ignores media reports before the meeting exists', () => {
+    const room = new Room('manual')
+    goLive(room, 'ari')
+    join(room, 'alice', 2_000)
+    room.run({ t: 'ACCEPT_NEXT', now: 3_000, commandId: 'a1', agentId: 'ari', ids: ids() })
+    room.run({ t: 'VISITOR_ACCEPT_INVITE', now: 3_500, commandId: 'v1', visitorId: 'alice' })
+    const callId = room.state.calls.ari!.callId
+    expect(room.state.calls.ari?.meetingId).toBeNull()
+
+    // Nobody can be in a room that does not exist yet; a report that says so
+    // must not mark the call live.
+    room.run({ t: 'MEDIA_JOINED', now: 3_600, callId, who: 'host' })
+    room.run({ t: 'MEDIA_JOINED', now: 3_700, callId, who: 'visitor' })
+    expect(room.state.calls.ari?.status).not.toBe('in_call')
+    expect(room.state.calls.ari?.hostPresent).toBe(false)
+    expect(room.types()).not.toContain('broadcast')
+  })
+
+  it('a visitor put back in line keeps their details and their original join time', () => {
+    const room = new Room('auto')
+    goLive(room, 'ari')
+    join(room, 'alice', 2_000, 'example', 'alice@example.com') // → ari
+    room.run({ t: 'VISITOR_ACCEPT_INVITE', now: 2_500, commandId: 'v1', visitorId: 'alice' })
+    expect(room.queueIds).toEqual([])
+
+    room.run({ t: 'CALL_PROVISION_FAILED', now: 3_000, callId: room.state.calls.ari!.callId, error: 'RealtimeKit 502', ids: ids() })
+    const restored = room.state.queue[0]
+    expect(restored?.visitorId).toBe('alice')
+    expect(restored?.joinedAt).toBe(2_000)
+    expect(restored?.email).toBe('alice@example.com')
+    expect(restored?.pageUrl).toBe('https://example.com/pricing')
   })
 
   it('an agent can still accept by hand during a provisioning hold', () => {

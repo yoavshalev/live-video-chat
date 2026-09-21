@@ -161,7 +161,7 @@ npx wrangler secret put SESSION_SECRET         --config $C   # any long random s
 
 ```bash
 npx wrangler d1 migrations apply founderlive --remote --config $C
-npm run deploy -- --config $C        # builds the client bundles, typechecks, runs the tests, deploys
+npm run deploy -- --config $C        # refuses template placeholders, then builds, typechecks, tests, deploys
 ```
 
 Do **not** run `npm run db:seed:remote` unless you want the two example sites;
@@ -276,6 +276,12 @@ npx wrangler secret put ALLOWED_HOST_EMAIL    --config $C   # optional: comma-se
 `workers_dev` is `false` because a `*.workers.dev` hostname is an
 unauthenticated route that bypasses any Access policy bound to the real domain.
 
+Dashboard writes are refused when the browser reports them as cross-site
+(`Sec-Fetch-Site` / `Origin`), on top of the `SameSite=Lax` cookie; dashboard
+pages send `frame-ancestors 'none'`; and the two credentials published for
+local development — the example `SESSION_SECRET` and the `dev@example.com`
+admin — are refused outright unless `PUBLIC_BASE_URL` is localhost.
+
 ---
 
 ## Embedding
@@ -301,7 +307,9 @@ site to that subtree. `www.` is stripped on entry; nothing else is.
 
 Refused on purpose, pinned by `test/domains.test.ts`: lookalikes
 (`evil-example.com`), the domain as a prefix of another (`example.com.attacker.net`),
-plain `http://` on a real domain, and bare registry suffixes (`com`, `co.uk`).
+plain `http://` on a real domain, bare registry suffixes (`com`, `co.uk`), and
+multi-tenant hosting suffixes as roots (`github.io`, `pages.dev`, `vercel.app`,
+`myshopify.com`… — a site *under* one, like `mysite.github.io`, is fine).
 `localhost` is the one exception to https, on any port, for local development —
 remove it from production sites.
 
@@ -394,9 +402,19 @@ with a "Tap to hear" fallback where autoplay is blocked.
 sides get the same tools: a microphone meter on the preview screen before
 joining, and in the call a settings button with microphone, camera and (in
 Chrome, Edge and Firefox) speaker pickers, a meter of your own microphone, a
-meter of what is arriving from the other person, and a "muted" label when they
-have muted themselves. If their meter moves and you hear nothing, it is your
-output; if it stays flat, it is their input.
+meter of what is arriving from the other person, a "mic off" label when their
+microphone is not in the call, and a status line that says which it is ("Your
+mic: on — Shure MVX2U. Them: arriving and playing"). The mute button reflects
+what the SDK actually has, not what was asked for: a microphone the browser
+refused, or that iOS handed over silent, shows as **off** on that person's own
+screen with a one-tap "Turn it on", instead of only as "mic off" on the other
+side.
+
+**Device defaults.** The camera, microphone and speaker you pick — on the
+dashboard's *Check camera* or inside a call — are remembered per browser and
+used for every call after that. Agents can also tick *skip this check next
+time* to join the moment their devices are up. Nothing is stored on the
+server: a device id only means something to the browser that issued it.
 
 A meeting is created only when a call is accepted, never for people in the
 queue, and exactly two participant tokens are minted, by the Durable Object.
@@ -409,7 +427,7 @@ deliberately complete.
 ## Testing
 
 ```bash
-npm test             # 82 unit tests: state machine (round-robin, races, timers), domains, alerts, passwords
+npm test             # 85 unit tests: state machine (round-robin, races, timers), domains, alerts, passwords
 npm run smoke        # 45 end-to-end checks against a running Worker: origins, sockets, queue, auto-assignment, D1
 npm run smoke:sites  # 26 checks on site management, domain enforcement, per-site settings
 npm run smoke:call   # 16 checks that create and tear down a REAL RealtimeKit meeting

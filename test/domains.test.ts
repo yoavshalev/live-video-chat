@@ -49,6 +49,15 @@ describe('normalizeDomain', () => {
     expect(normalizeDomain('mysite.co.uk')).toBe('mysite.co.uk')
   })
 
+  it('refuses multi-tenant hosting suffixes as roots, but not a site under one', () => {
+    // github.io as a root would admit every GitHub Pages site in the world.
+    expect(normalizeDomain('github.io')).toBeNull()
+    expect(normalizeDomain('pages.dev')).toBeNull()
+    expect(normalizeDomain('https://vercel.app/')).toBeNull()
+    expect(normalizeDomain('mysite.github.io')).toBe('mysite.github.io')
+    expect(normalizeDomain('shop.myshopify.com')).toBe('shop.myshopify.com')
+  })
+
   it('refuses malformed input', () => {
     expect(normalizeDomain('')).toBeNull()
     expect(normalizeDomain('   ')).toBeNull()

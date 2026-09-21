@@ -241,7 +241,10 @@ export function register(app: Hono<AppEnv>): void {
     // Re-checking the secret costs one storage read and means this endpoint cannot
     // be used to end somebody else's call by guessing an id.
     const check = await room(c.env).redeemCall({ callId, secret, who, visitorId, agentId: agent?.agentId })
-    if (!check.ok && check.error !== 'not_ready') return c.json({ error: check.error }, 403)
+    // `not_ready` means no meeting exists yet, so nobody can have joined one:
+    // a presence report at that point is bogus and is refused rather than
+    // letting a call be marked live before it can carry media.
+    if (!check.ok) return c.json({ error: check.error }, check.error === 'not_ready' ? 409 : 403)
 
     await room(c.env).mediaPresence({ callId, who, joined: body.joined === true })
     return c.body(null, 204)

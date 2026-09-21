@@ -438,6 +438,17 @@ body { background: #000; overflow: hidden; }
   border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: var(--shadow);
 }
 .settings select { width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.check input { margin: 0; }
+
+/* "Your microphone is off" — under the timer, above everything else. */
+.mic-off {
+  position: absolute; top: calc(52px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 8;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+  background: rgba(255,90,82,.16); backdrop-filter: blur(8px); color: #fff;
+  border: 1px solid rgba(255,90,82,.55); border-radius: 999px; padding: 6px 8px 6px 14px; font-size: 13px;
+}
+.mic-off .btn-primary { padding: 6px 12px; border-radius: 999px; font-size: 13px; }
 .error-box {
   border: 1px solid rgba(255,90,82,.45); background: rgba(255,90,82,.08);
   border-radius: 10px; padding: 12px; font-size: 14px; text-align: left;

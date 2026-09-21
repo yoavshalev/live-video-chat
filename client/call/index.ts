@@ -13,7 +13,7 @@
  *      and microphone, on a screen whose only content is that request, after the
  *      person deliberately clicked "Join".
  *   3. Show the preview, device pickers and a microphone meter. Still not in
- *      the room.
+ *      the room. (An agent who has asked to skip this step joins right here.)
  *   4. `meeting.join()` on an explicit second click.
  *
  * Asking for permissions any earlier — on page load, or when someone joins the
@@ -21,14 +21,18 @@
  * One badly-timed prompt costs every future call from that browser.
  *
  * Audio is the part that goes wrong in practice ("I can't hear you"), and it
- * goes wrong in two different places that look identical from the other end:
- * their microphone (wrong device, muted, silent) or your speaker (wrong output,
- * autoplay refused). So both sides get, in the call: a microphone picker with a
- * live level meter, a speaker picker where the browser allows it, a meter of
- * what is arriving from the other side, and a "muted" label when the other
- * person has muted themselves. If their meter moves and you hear nothing, it is
- * your output; if it does not, it is their input.
+ * goes wrong in places that look identical from the other end: their
+ * microphone never got into the call, they are muted, their device is silent,
+ * your output is the wrong device, autoplay was refused. So both sides get the
+ * same instruments: their OWN microphone state, read from the SDK rather than
+ * assumed (a microphone the browser refused shows as off here, with a button to
+ * try again, instead of only as "muted" on the other side); a level meter for
+ * it; a meter for what is arriving from the other person; a speaker picker
+ * where the browser allows one; and a status line that says which of these it
+ * is.
  */
+
+import { loadPrefs, pickRemembered, savePrefs } from '../shared/prefs'
 
 interface Boot {
   callId: string
@@ -118,6 +122,8 @@ const els = {
   cameraSelect: $<HTMLSelectElement>('camera-select'),
   micSelect: $<HTMLSelectElement>('mic-select'),
   previewLevel: $<HTMLElement>('preview-level'),
+  autoJoinWrap: $<HTMLElement>('auto-join-wrap'),
+  autoJoin: $<HTMLInputElement>('auto-join'),
   join: $<HTMLButtonElement>('btn-join'),
   retry: $<HTMLButtonElement>('btn-retry'),
   abandon: $<HTMLButtonElement>('btn-abandon'),
@@ -133,6 +139,9 @@ const els = {
   peerName: $<HTMLDivElement>('peer-name'),
   timer: $<HTMLDivElement>('timer'),
   elapsed: $<HTMLSpanElement>('elapsed'),
+  micOff: $<HTMLDivElement>('mic-off'),
+  micOffText: $<HTMLElement>('mic-off-text'),
+  micOffFix: $<HTMLButtonElement>('mic-off-fix'),
   controls: $<HTMLDivElement>('controls'),
   mic: $<HTMLButtonElement>('btn-mic'),
   cam: $<HTMLButtonElement>('btn-cam'),
@@ -142,6 +151,7 @@ const els = {
   // In-call settings panel.
   settings: $<HTMLDivElement>('settings'),
   settingsClose: $<HTMLButtonElement>('settings-close'),
+  audioStatus: $<HTMLElement>('audio-status'),
   callMic: $<HTMLSelectElement>('call-mic'),
   callCam: $<HTMLSelectElement>('call-cam'),
   speakerWrap: $<HTMLDivElement>('speaker-wrap'),
@@ -149,6 +159,8 @@ const els = {
   micLevel: $<HTMLElement>('mic-level'),
   remoteLevel: $<HTMLElement>('remote-level'),
   remoteLevelLabel: $<HTMLElement>('remote-level-label'),
+  autoJoinCallWrap: $<HTMLElement>('auto-join-call-wrap'),
+  autoJoinCall: $<HTMLInputElement>('auto-join-call'),
   settingsHint: $<HTMLElement>('settings-hint')
 }
 
@@ -158,7 +170,12 @@ let startedAt = 0
 let ticker: ReturnType<typeof setInterval> | null = null
 let reconciler: ReturnType<typeof setInterval> | null = null
 let reported = false
+let joined = false
 let finishing = false
+/** True while the person has muted themselves, as opposed to the SDK having no microphone. */
+let selfMuted = false
+/** The last thing the SDK said went wrong with a device, for the status line. */
+let lastMediaError: string | null = null
 
 // ─── Talking to whoever framed us ────────────────────────────────────────────
 
@@ -292,10 +309,13 @@ function framePermitsMedia(): boolean {
 // ─── Level meters ────────────────────────────────────────────────────────────
 //
 // A bar that moves when sound is on a track. Reads the waveform through an
-// AnalyserNode; nothing is routed to the speakers, so it never doubles audio.
-// One AudioContext for the page: browsers start it suspended until the person
-// has clicked something in THIS frame, so it is resumed on the first gesture
-// (the Join click, at the latest).
+// AnalyserNode on a CLONE of the track: the SDK's own track is never touched
+// by anything but the SDK. That matters on iOS, where a captured track goes
+// silent the moment a second consumer takes hold of the capture, and where
+// "silent" looks, to the other side, exactly like "muted". One AudioContext
+// for the page: browsers start it suspended until the person has clicked
+// something in THIS frame, so it is resumed on the first gesture (the Join
+// click, at the latest).
 
 let audioContext: AudioContext | null = null
 
@@ -317,9 +337,12 @@ window.addEventListener('keydown', resumeAudio, { capture: true })
 
 class LevelMeter {
   private track: MediaStreamTrack | null = null
+  private clone: MediaStreamTrack | null = null
   private source: MediaStreamAudioSourceNode | null = null
   private analyser: AnalyserNode | null = null
   private frame = 0
+  /** 0–100, the last reading. Lets the status line say "silent" with evidence. */
+  level = 0
 
   constructor(private readonly bars: HTMLElement[]) {}
 
@@ -327,11 +350,12 @@ class LevelMeter {
     if (track === this.track) return
     this.detach()
     this.track = track
-    if (!track) return
+    if (!track || track.readyState === 'ended') return
     const ctx = context()
     if (!ctx) return
     try {
-      this.source = ctx.createMediaStreamSource(new MediaStream([track]))
+      this.clone = track.clone()
+      this.source = ctx.createMediaStreamSource(new MediaStream([this.clone]))
       this.analyser = ctx.createAnalyser()
       this.analyser.fftSize = 512
       this.source.connect(this.analyser)
@@ -350,8 +374,8 @@ class LevelMeter {
       }
       // RMS of speech at a normal distance sits around 0.05–0.2; scaled so
       // talking fills most of the bar and silence shows nothing.
-      const level = Math.min(100, Math.round(Math.sqrt(sum / samples.length) * 320))
-      for (const bar of this.bars) bar.style.width = `${level}%`
+      this.level = Math.min(100, Math.round(Math.sqrt(sum / samples.length) * 320))
+      for (const bar of this.bars) bar.style.width = `${this.level}%`
       this.frame = requestAnimationFrame(tick)
     }
     this.frame = requestAnimationFrame(tick)
@@ -361,9 +385,14 @@ class LevelMeter {
     cancelAnimationFrame(this.frame)
     this.source?.disconnect()
     this.analyser?.disconnect()
+    // The clone holds the capture open on its own; stopping it is what lets
+    // the browser's "microphone in use" indicator go out.
+    this.clone?.stop()
     this.source = null
     this.analyser = null
+    this.clone = null
     this.track = null
+    this.level = 0
     for (const bar of this.bars) bar.style.width = '0%'
   }
 }
@@ -418,18 +447,32 @@ async function setup(): Promise<void> {
     return
   }
 
+  wireSelf()
   els.preview.classList.remove('hidden')
   // Lays the overlay out around the preview (beside the pickers on a wide stage).
   els.overlay.classList.add('setup')
   // `true` marks this as a local preview that is not published to the room.
   meeting.self.registerVideoElement(els.preview, true)
   await refreshDevices()
+  await applyRememberedDevices()
   micMeter.attach(meeting.self.audioTrack ?? null)
+  syncSelfControls()
 
   els.join.classList.remove('hidden')
   els.join.textContent = boot.who === 'host' ? 'Join the call' : `Join ${boot.peerName || credentials.displayName}`
   els.join.onclick = () => void join()
   els.join.focus()
+
+  // Agents take many calls; the check screen is theirs to skip. Visitors get
+  // it every time — it is also the moment their browser asks for permission.
+  if (boot.who === 'host') {
+    els.autoJoinWrap.classList.remove('hidden')
+    els.autoJoinCallWrap.classList.remove('hidden')
+    const auto = Boolean(loadPrefs().autoJoin)
+    els.autoJoin.checked = auto
+    els.autoJoinCall.checked = auto
+    if (auto && meeting.self.audioEnabled && meeting.self.videoEnabled) void join()
+  }
 }
 
 function handleMediaError(error: unknown): void {
@@ -455,6 +498,100 @@ function handleMediaError(error: unknown): void {
     return
   }
   showError(describe(error), { retry: true, newTab: inFrame })
+}
+
+// ─── Our own microphone and camera ───────────────────────────────────────────
+
+/**
+ * The SDK is the source of truth for whether our microphone is in the call.
+ * `defaults: { audio: true }` is a request, not a promise: the browser can
+ * refuse, iOS can hand over a muted track, a device can vanish. The buttons
+ * used to assume success and only flip on click, which is how one side sat
+ * "unmuted" while the other saw "muted". Now they are read back from the SDK,
+ * and a microphone that is off without anyone asking gets a banner.
+ */
+function wireSelf(): void {
+  if (!meeting) return
+  const self = meeting.self
+  self.on('audioUpdate', () => syncSelfControls())
+  self.on('videoUpdate', () => syncSelfControls())
+  self.on('deviceUpdate', () => {
+    void refreshDevices()
+    reconcileAudio()
+  })
+  self.on('mediaPermissionError', (...args: unknown[]) => {
+    const detail = args[0] as { message?: string; kind?: string } | undefined
+    lastMediaError = detail?.message ? `${detail.kind ?? 'device'}: ${detail.message}` : 'the browser refused a device'
+    console.warn('[call] media permission error', detail)
+    syncSelfControls()
+  })
+}
+
+function syncSelfControls(): void {
+  if (!meeting) return
+  const audioOn = meeting.self.audioEnabled
+  const videoOn = meeting.self.videoEnabled
+  els.mic.classList.toggle('off', !audioOn)
+  els.mic.setAttribute('aria-pressed', String(!audioOn))
+  els.mic.setAttribute('aria-label', audioOn ? 'Mute microphone' : 'Unmute microphone')
+  els.cam.classList.toggle('off', !videoOn)
+  els.cam.setAttribute('aria-pressed', String(!videoOn))
+  els.cam.setAttribute('aria-label', videoOn ? 'Turn camera off' : 'Turn camera on')
+
+  // Off without you asking for it: say so on YOUR screen. The other side only
+  // ever sees "muted", which sends them looking in the wrong place.
+  const unexpected = !audioOn && !selfMuted && !finishing
+  els.micOff.classList.toggle('hidden', !unexpected)
+  if (unexpected) {
+    els.micOffText.textContent = lastMediaError
+      ? `Your microphone is off (${lastMediaError}).`
+      : 'Your microphone is off — the other side cannot hear you.'
+  }
+  renderAudioStatus()
+}
+
+async function turnMicOn(): Promise<void> {
+  if (!meeting) return
+  selfMuted = false
+  els.micOffFix.disabled = true
+  try {
+    await meeting.self.enableAudio()
+    lastMediaError = null
+  } catch (error) {
+    lastMediaError = describe(error)
+    console.warn('[call] enableAudio failed', error)
+  } finally {
+    els.micOffFix.disabled = false
+  }
+  micMeter.attach(meeting.self.audioTrack ?? null)
+  syncSelfControls()
+}
+els.micOffFix.onclick = () => void turnMicOn()
+
+/** One line each for you and for them, in the settings panel. */
+function renderAudioStatus(): void {
+  if (!meeting) return
+  const mic = meeting.self.getCurrentDevices().audio?.label
+  const you = meeting.self.audioEnabled
+    ? `on${mic ? ` — ${mic}` : ''}${micMeter.level === 0 && joined ? ' (nothing heard yet — say something)' : ''}`
+    : selfMuted
+      ? 'muted by you'
+      : `OFF — ${lastMediaError ?? 'the browser did not hand over a microphone'}`
+  const peer = remoteParticipant
+  const them = !joined
+    ? 'not connected yet'
+    : !peer
+      ? 'not in the room yet'
+      : peer.audioEnabled === false
+        ? 'their microphone is off on their side'
+        : !peer.audioTrack
+          ? 'on, but no audio has arrived yet'
+          : els.remoteAudio.paused
+            ? 'arriving, but playback is blocked — use "Tap to hear"'
+            : remoteMeter.level === 0
+              ? 'arriving and playing (silent right now)'
+              : 'arriving and playing'
+  els.audioStatus.textContent = `Your mic: ${you}. Them: ${them}.`
 }
 
 // ─── Devices ─────────────────────────────────────────────────────────────────
@@ -497,6 +634,21 @@ async function refreshDevices(): Promise<void> {
   }
 }
 
+/** Starts from what this browser used last time, when those devices are still here. */
+async function applyRememberedDevices(): Promise<void> {
+  if (!meeting) return
+  const prefs = loadPrefs()
+  const current = meeting.self.getCurrentDevices()
+  const mic = pickRemembered(microphones, prefs.audioinput)
+  if (mic && mic.deviceId !== current.audio?.deviceId) await switchDevice(microphones, mic.deviceId, false)
+  const cam = pickRemembered(cameras, prefs.videoinput)
+  if (cam && cam.deviceId !== current.video?.deviceId) await switchDevice(cameras, cam.deviceId, false)
+  if (canPickSpeaker) {
+    const speaker = pickRemembered(speakers, prefs.audiooutput)
+    if (speaker) await switchSpeaker(speaker.deviceId, false)
+  }
+}
+
 function fillSelect(select: HTMLSelectElement, devices: RtkDevice[], selected?: string): void {
   select.replaceChildren(
     ...devices.map((device, index) => {
@@ -509,7 +661,7 @@ function fillSelect(select: HTMLSelectElement, devices: RtkDevice[], selected?: 
   )
 }
 
-async function switchDevice(devices: RtkDevice[], deviceId: string): Promise<void> {
+async function switchDevice(devices: RtkDevice[], deviceId: string, remember = true): Promise<void> {
   const device = devices.find((candidate) => candidate.deviceId === deviceId)
   if (!device || !meeting) return
   try {
@@ -518,18 +670,23 @@ async function switchDevice(devices: RtkDevice[], deviceId: string): Promise<voi
     els.settingsHint.textContent = `Could not switch: ${describe(error)}`
     return
   }
-  // The SDK swaps the track under us; the meter follows on the next reconcile,
-  // and the other picker for the same kind is kept in step.
-  const twin = device.kind === 'videoinput' ? [els.cameraSelect, els.callCam] : [els.micSelect, els.callMic]
-  for (const select of twin) select.value = deviceId
+  // The SDK swaps the track under us; the meter follows, and the other picker
+  // for the same kind is kept in step.
+  const isCamera = device.kind === 'videoinput'
+  for (const select of isCamera ? [els.cameraSelect, els.callCam] : [els.micSelect, els.callMic]) select.value = deviceId
+  if (remember) savePrefs({ [isCamera ? 'videoinput' : 'audioinput']: { id: device.deviceId, label: device.label } })
   micMeter.attach(meeting.self.audioTrack ?? null)
+  syncSelfControls()
 }
 
-async function switchSpeaker(deviceId: string): Promise<void> {
+async function switchSpeaker(deviceId: string, remember = true): Promise<void> {
   const sinkable = [els.remoteAudio, els.shareAudio] as Array<HTMLMediaElement & { setSinkId?(id: string): Promise<void> }>
   try {
     await Promise.all(sinkable.map((element) => element.setSinkId?.(deviceId)))
     els.settingsHint.textContent = ''
+    els.callSpeaker.value = deviceId
+    const chosen = speakers.find((d) => d.deviceId === deviceId)
+    if (remember && chosen) savePrefs({ audiooutput: { id: chosen.deviceId, label: chosen.label } })
   } catch (error) {
     els.settingsHint.textContent = `Could not switch speaker: ${describe(error)}`
   }
@@ -542,12 +699,21 @@ els.callMic.onchange = () => void switchDevice(microphones, els.callMic.value)
 els.callSpeaker.onchange = () => void switchSpeaker(els.callSpeaker.value)
 navigator.mediaDevices?.addEventListener?.('devicechange', () => void refreshDevices())
 
+for (const box of [els.autoJoin, els.autoJoinCall]) {
+  box.onchange = () => {
+    savePrefs({ autoJoin: box.checked })
+    els.autoJoin.checked = box.checked
+    els.autoJoinCall.checked = box.checked
+  }
+}
+
 function toggleSettings(open?: boolean): void {
   const show = open ?? els.settings.classList.contains('hidden')
   els.settings.classList.toggle('hidden', !show)
   els.settingsButton.setAttribute('aria-expanded', String(show))
   if (show) {
     void refreshDevices()
+    renderAudioStatus()
     els.settingsHint.textContent = canPickSpeaker
       ? ''
       : 'This browser does not let a page choose the speaker; use the system sound settings.'
@@ -559,7 +725,7 @@ els.settingsClose.onclick = () => toggleSettings(false)
 // ─── The call ────────────────────────────────────────────────────────────────
 
 async function join(): Promise<void> {
-  if (!meeting) return
+  if (!meeting || joined) return
   els.join.disabled = true
   els.join.textContent = 'Connecting…'
   showOverlay('Connecting…', 'One moment.')
@@ -569,9 +735,11 @@ async function join(): Promise<void> {
     await meeting.join()
   } catch (error) {
     els.join.disabled = false
+    els.join.textContent = 'Join the call'
     handleMediaError(error)
     return
   }
+  joined = true
 
   meeting.self.deregisterVideoElement(els.preview)
   els.preview.classList.add('hidden')
@@ -579,6 +747,7 @@ async function join(): Promise<void> {
   meeting.self.registerVideoElement(els.local, true)
 
   els.overlay.classList.add('hidden')
+  els.overlay.classList.remove('setup')
   els.controls.hidden = false
   els.timer.classList.remove('hidden')
 
@@ -588,6 +757,7 @@ async function join(): Promise<void> {
 
   wireParticipants()
   wireControls()
+  syncSelfControls()
 
   reported = true
   notifyParent('media-joined')
@@ -603,20 +773,25 @@ async function join(): Promise<void> {
 
 function reconcileAudio(): void {
   if (!meeting) return
-  micMeter.attach(meeting.self.audioTrack ?? null)
+  micMeter.attach(meeting.self.audioEnabled ? (meeting.self.audioTrack ?? null) : null)
   const peer = remoteParticipant
-  if (!peer) return
-  const track = peer.audioEnabled === false ? null : (peer.audioTrack ?? null)
-  playRemoteAudio(track)
-  remoteMeter.attach(track)
-  labelPeer(peer)
+  if (peer) {
+    const track = peer.audioEnabled === false ? null : (peer.audioTrack ?? null)
+    playRemoteAudio(track)
+    remoteMeter.attach(track)
+    labelPeer(peer)
+  }
+  // Cheap, and the buttons must never drift from the SDK again.
+  const audioOn = meeting.self.audioEnabled
+  if (els.mic.classList.contains('off') === audioOn) syncSelfControls()
+  else renderAudioStatus()
 }
 
 function labelPeer(participant: RtkParticipant): void {
   const name = participant.name || boot.peerName || 'Connected'
   const muted = participant.audioEnabled === false
-  els.peerName.textContent = muted ? `${name} · muted` : name
-  els.remoteLevelLabel.textContent = muted ? `${name} (muted)` : `${name} — what is arriving`
+  els.peerName.textContent = muted ? `${name} · mic off` : name
+  els.remoteLevelLabel.textContent = muted ? `${name} (mic off)` : `${name} — what is arriving`
 }
 
 function wireParticipants(): void {
@@ -630,6 +805,7 @@ function wireParticipants(): void {
     labelPeer(participant)
     els.peerName.classList.remove('hidden')
     showWaitingForPeer(false)
+    renderAudioStatus()
   }
 
   // Someone may already be in the room — the other side usually arrives first.
@@ -657,6 +833,7 @@ function wireParticipants(): void {
     // Not the end of the call: the server's reconnect window decides that. A
     // dropped connection on a train should not hang up on someone.
     showWaitingForPeer(true)
+    renderAudioStatus()
   })
 
   // The other side's screen. A screen track is a plain MediaStreamTrack, so it
@@ -714,6 +891,7 @@ function playInto(element: HTMLMediaElement, track: MediaStreamTrack | null): vo
     // click normally provides one, but not after a reload straight into a live
     // call. One tap fixes it, so offer exactly that.
     els.hear.classList.remove('hidden')
+    renderAudioStatus()
   })
 }
 
@@ -723,6 +901,7 @@ els.hear.onclick = () => {
   for (const element of [els.remoteAudio, els.shareAudio]) {
     if (element.srcObject) void element.play().catch(() => els.hear.classList.remove('hidden'))
   }
+  renderAudioStatus()
 }
 
 function syncShareButton(): void {
@@ -743,6 +922,7 @@ function showWaitingForPeer(waiting: boolean): void {
   clearError()
   els.preview.classList.add('hidden')
   els.devices.classList.add('hidden')
+  els.autoJoinWrap.classList.add('hidden')
   els.join.classList.add('hidden')
   showOverlay(
     boot.who === 'host' ? 'Waiting for them to join…' : `Waiting for ${boot.peerName || 'the host'}…`,
@@ -753,22 +933,31 @@ function showWaitingForPeer(waiting: boolean): void {
 function wireControls(): void {
   els.mic.onclick = async () => {
     if (!meeting) return
-    const enabled = meeting.self.audioEnabled
-    if (enabled) await meeting.self.disableAudio()
-    else await meeting.self.enableAudio()
-    els.mic.classList.toggle('off', enabled)
-    els.mic.setAttribute('aria-pressed', String(enabled))
-    els.mic.setAttribute('aria-label', enabled ? 'Unmute microphone' : 'Mute microphone')
+    try {
+      if (meeting.self.audioEnabled) {
+        selfMuted = true
+        await meeting.self.disableAudio()
+      } else {
+        selfMuted = false
+        await meeting.self.enableAudio()
+        lastMediaError = null
+      }
+    } catch (error) {
+      lastMediaError = describe(error)
+    }
+    micMeter.attach(meeting.self.audioEnabled ? (meeting.self.audioTrack ?? null) : null)
+    syncSelfControls()
   }
 
   els.cam.onclick = async () => {
     if (!meeting) return
-    const enabled = meeting.self.videoEnabled
-    if (enabled) await meeting.self.disableVideo()
-    else await meeting.self.enableVideo()
-    els.cam.classList.toggle('off', enabled)
-    els.cam.setAttribute('aria-pressed', String(enabled))
-    els.cam.setAttribute('aria-label', enabled ? 'Turn camera on' : 'Turn camera off')
+    try {
+      if (meeting.self.videoEnabled) await meeting.self.disableVideo()
+      else await meeting.self.enableVideo()
+    } catch (error) {
+      els.settingsHint.textContent = `Camera: ${describe(error)}`
+    }
+    syncSelfControls()
   }
 
   // Screen share exists only where the browser can capture a screen — no
@@ -822,6 +1011,7 @@ async function finish(type: 'ended' | 'left'): Promise<void> {
   reconciler = null
   els.controls.hidden = true
   els.timer.classList.add('hidden')
+  els.micOff.classList.add('hidden')
   toggleSettings(false)
 
   if (reported) notifyParent('media-left')
@@ -836,6 +1026,7 @@ async function finish(type: 'ended' | 'left'): Promise<void> {
   els.overlay.classList.remove('setup')
   els.preview.classList.add('hidden')
   els.devices.classList.add('hidden')
+  els.autoJoinWrap.classList.add('hidden')
   els.join.classList.add('hidden')
   showOverlay('Call ended', 'Thanks for the conversation.')
 

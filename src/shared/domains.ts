@@ -42,6 +42,25 @@ const REGISTRY_SUFFIXES = new Set([
   'co.kr', 'com.pl', 'com.es', 'com.pt', 'com.ua', 'com.ru'
 ])
 
+/**
+ * Multi-tenant hosting suffixes. `github.io` is not a registry suffix, but it is
+ * a root under which strangers get subdomains, so accepting it as a customer's
+ * domain would admit every GitHub Pages site. A customer's own site under one of
+ * these — `mysite.github.io` — is fine, and the subdomain rule covers its
+ * subtree as usual. Not exhaustive; the Public Suffix List's private section
+ * is the complete answer and far too large to ship here.
+ */
+const PLATFORM_SUFFIXES = new Set([
+  'github.io', 'gitlab.io', 'pages.dev', 'workers.dev', 'r2.dev', 'trycloudflare.com',
+  'vercel.app', 'netlify.app', 'herokuapp.com', 'fly.dev', 'onrender.com', 'railway.app', 'deno.dev',
+  'web.app', 'firebaseapp.com', 'appspot.com', 'azurewebsites.net', 'azurestaticapps.net',
+  'cloudfront.net', 'amazonaws.com', 'ondigitalocean.app', 'linodeusercontent.com',
+  'wixsite.com', 'myshopify.com', 'webflow.io', 'squarespace.com', 'weebly.com', 'wordpress.com',
+  'blogspot.com', 'tumblr.com', 'godaddysites.com', 'hubspotpagebuilder.com', 'wpengine.com',
+  'glitch.me', 'repl.co', 'replit.app', 'surge.sh', 'ngrok.io', 'ngrok.app', 'ngrok-free.app',
+  'framer.app', 'framer.website', 'carrd.co', 'notion.site', 'super.site', 'bubbleapps.io', 'softr.app', 'lovable.app'
+])
+
 /** Hosts that may be reached over plain http, because there is no https on them. */
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -84,7 +103,7 @@ export function normalizeDomain(input: string): string | null {
   // A single label is either a typo or a bare TLD; both would be far too broad.
   if (labels.length < 2) return null
   if (labels.some((label) => label.length === 0 || label.length > 63)) return null
-  if (REGISTRY_SUFFIXES.has(value)) return null
+  if (REGISTRY_SUFFIXES.has(value) || PLATFORM_SUFFIXES.has(value)) return null
 
   return value
 }

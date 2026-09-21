@@ -72,6 +72,8 @@ export interface MediaSurfaceOptions {
   onStatus: (message: string, isError?: boolean) => void
 }
 
+import { loadPrefs, pickRemembered, savePrefs } from '../shared/prefs'
+
 export class MediaSurface {
   private stream: MediaStream | null = null
   private recorder: MediaRecorder | null = null
@@ -112,7 +114,7 @@ export class MediaSurface {
     this.els.hint.textContent =
       mode === 'record'
         ? `Aim for 5–15 seconds. It loops silently in the widget, so lead with your face, not a sentence that needs sound.`
-        : 'Check your framing, your light and your levels before you go live.'
+        : 'Check your framing, your light and your levels before you go live. The camera and microphone you pick here are used for every call on this browser.'
     this.setError('')
     this.showRecorded(false)
     this.els.record.classList.toggle('hidden', mode !== 'record')
@@ -132,19 +134,44 @@ export class MediaSurface {
       this.setError('This browser cannot open a camera. Try Chrome, Edge or Safari.')
       return
     }
+    // Before any pick, start from the browser's remembered devices (the same
+    // ones the call page uses), if they are still plugged in.
+    let wanted = { camera: this.els.cameraSelect.value, mic: this.els.micSelect.value }
+    if (!wanted.camera && !wanted.mic) {
+      try {
+        const known = await navigator.mediaDevices.enumerateDevices()
+        const prefs = loadPrefs()
+        wanted = {
+          camera: pickRemembered(known.filter((d) => d.kind === 'videoinput'), prefs.videoinput)?.deviceId ?? '',
+          mic: pickRemembered(known.filter((d) => d.kind === 'audioinput'), prefs.audioinput)?.deviceId ?? ''
+        }
+      } catch {
+        /* the browser default it is */
+      }
+    }
+    const constraints = (exact: boolean): MediaStreamConstraints => ({
+      video: {
+        deviceId: exact && wanted.camera ? { exact: wanted.camera } : undefined,
+        // A native camera mode, deliberately. 1280x800 is not one, so cameras
+        // satisfy it by scaling — which delivers frames at uneven intervals and
+        // is how audio and video end up drifting apart over a 12-second clip.
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 30 }
+      },
+      audio: { deviceId: exact && wanted.mic ? { exact: wanted.mic } : undefined }
+    })
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: this.els.cameraSelect.value ? { exact: this.els.cameraSelect.value } : undefined,
-          // A native camera mode, deliberately. 1280x800 is not one, so cameras
-          // satisfy it by scaling — which delivers frames at uneven intervals and
-          // is how audio and video end up drifting apart over a 12-second clip.
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30, max: 30 }
-        },
-        audio: { deviceId: this.els.micSelect.value ? { exact: this.els.micSelect.value } : undefined }
-      })
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints(true))
+      } catch (error) {
+        // A remembered device that is gone (or an id the browser rotated) must
+        // not block the check; fall back to whatever the browser offers.
+        const name = (error as { name?: string } | null)?.name ?? ''
+        if ((name === 'OverconstrainedError' || name === 'NotFoundError') && (wanted.camera || wanted.mic)) {
+          this.stream = await navigator.mediaDevices.getUserMedia(constraints(false))
+        } else throw error
+      }
     } catch (error) {
       this.setError(describePermission(error))
       return
@@ -179,6 +206,12 @@ export class MediaSurface {
   }
 
   private async restart(): Promise<void> {
+    // A pick here is a pick for every call on this browser.
+    const chosen = (select: HTMLSelectElement) => {
+      const option = select.selectedOptions[0]
+      return option && select.value ? { id: select.value, label: option.textContent ?? '' } : undefined
+    }
+    savePrefs({ videoinput: chosen(this.els.cameraSelect), audioinput: chosen(this.els.micSelect) })
     this.releaseStream(false)
     await this.start()
   }

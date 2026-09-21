@@ -98,6 +98,16 @@ export interface CallRecord {
   siteId: string
   pageUrl: string
   question: string | null
+  /**
+   * The rest of the queue entry, kept so a visitor who is put back in line —
+   * provisioning failed, the agent went offline — returns with their details
+   * and their ORIGINAL place in time, not a fresh join.
+   */
+  email: string | null
+  company: string | null
+  pageTitle: string | null
+  referrer: string | null
+  joinedAt: number
   /** Null until the RealtimeKit meeting has been created. */
   meetingId: string | null
   status: 'provisioning' | 'connecting' | 'in_call'
@@ -814,7 +824,10 @@ function apply(state: RoomState, command: Command, settings: RoomSettings): Resu
     // ── In-call presence ────────────────────────────────────────────────────
     case 'MEDIA_JOINED': {
       const call = callById(state, command.callId)
-      if (!call) return { state, effects: [] }
+      // No meeting yet means nobody can have joined one: a presence report
+      // before provisioning finished is bogus, and honouring it would mark a
+      // call live that cannot carry media.
+      if (!call || call.meetingId === null) return { state, effects: [] }
       const updated: CallRecord = {
         ...call,
         hostPresent: command.who === 'host' ? true : call.hostPresent,
@@ -968,6 +981,11 @@ function invite(
     siteId: entry.siteId,
     pageUrl: entry.pageUrl,
     question: entry.question,
+    email: entry.email,
+    company: entry.company,
+    pageTitle: entry.pageTitle,
+    referrer: entry.referrer,
+    joinedAt: entry.joinedAt,
     meetingId: null,
     status: 'provisioning',
     startedAt: now,
@@ -1072,14 +1090,15 @@ function restoreVisitor(state: RoomState, agentId: string, now: number, settings
       id: call.queueEntryId,
       visitorId: call.visitorId,
       firstName: call.firstName,
-      email: null,
-      company: null,
+      email: call.email ?? null,
+      company: call.company ?? null,
       question: call.question,
       siteId: call.siteId,
       pageUrl: call.pageUrl,
-      pageTitle: null,
-      referrer: null,
-      joinedAt: now,
+      pageTitle: call.pageTitle ?? null,
+      referrer: call.referrer ?? null,
+      // The `??` guards cover call records persisted before these fields existed.
+      joinedAt: call.joinedAt ?? now,
       status: 'waiting',
       assignedTo: null,
       connected: true,

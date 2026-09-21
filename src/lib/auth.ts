@@ -42,6 +42,15 @@ import { createAgent, getAgentByEmail, getAgentById, countAgents, touchAgentLogi
 export const SESSION_COOKIE = 'fl_agent'
 const SESSION_TTL_SECONDS = 60 * 60 * 12
 
+/** The values published in .dev.vars.example and seed/dev-agent.sql. Local only. */
+const DEV_SESSION_SECRET = 'dev-only-not-a-real-secret'
+const DEV_ADMIN_EMAIL = 'dev@example.com'
+
+function isLocalDeployment(env: Env): boolean {
+  const host = new URL(env.PUBLIC_BASE_URL).hostname
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+}
+
 /** What a request knows about the signed-in agent. Cheap to derive; no D1. */
 export interface AgentSession {
   agentId: string
@@ -91,6 +100,12 @@ export async function authenticatePassword(env: Env, email: string, password: st
   const agent = await getAgentByEmail(env, email.trim().toLowerCase())
   const ok = await verifyPassword(agent?.password_hash ?? 'pbkdf2$1000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', password)
   if (!agent || !ok || agent.enabled !== 1) return null
+  if (agent.email === DEV_ADMIN_EMAIL && !isLocalDeployment(env)) {
+    // seed/dev-agent.sql is public. It is for `npm run dev`, and a deployment
+    // that loaded it must not accept a password anyone can read on GitHub.
+    console.error('[auth] refusing the seeded dev admin outside localhost; disable it and create a real agent with scripts/agent.mjs')
+    return null
+  }
   void touchAgentLogin(env, agent.id)
   return agent
 }
@@ -231,6 +246,12 @@ export async function resolveSession(c: Context<AppEnv>): Promise<AgentSession |
 
   const cookie = getCookie(c, SESSION_COOKIE)
   if (!cookie || !env.SESSION_SECRET) return null
+  if (env.SESSION_SECRET === DEV_SESSION_SECRET && !isLocalDeployment(env)) {
+    // Anyone can sign a session with the example secret. Better no dashboard
+    // than one that is open to whoever read .dev.vars.example.
+    console.error('[auth] SESSION_SECRET is the example value; set a real one: wrangler secret put SESSION_SECRET')
+    return null
+  }
   const session = await verifySession<SessionPayload>(cookie, env.SESSION_SECRET)
   if (!session || typeof session.exp !== 'number' || session.exp <= Date.now()) return null
   if (typeof session.agentId !== 'string' || typeof session.name !== 'string') return null
@@ -268,6 +289,38 @@ export function requireAgent(options: { admin?: boolean } = {}): MiddlewareHandl
     const fresh: AgentSession = { agentId: record.id, name: record.name, email: record.email, role: record.role }
     if (options.admin && fresh.role !== 'admin') return c.json({ error: 'admins only' }, 403)
     c.set('agent', fresh)
+    await next()
+  }
+}
+
+// ─── Cross-site writes ───────────────────────────────────────────────────────
+
+/**
+ * Refuses state-changing requests that a browser reports as coming from
+ * another site. The session cookie is SameSite=Lax, which already keeps it off
+ * cross-site POSTs; this closes the remaining gaps (same-site subdomains, older
+ * browsers, a future GET that mutates) without a token to thread through every
+ * form and fetch.
+ *
+ * A request with neither header is not from a browser (curl, the smoke suites)
+ * and cannot be carrying a victim's cookie, so it passes.
+ */
+export function rejectCrossSiteWrites(): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    const method = c.req.method
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next()
+    const fetchSite = c.req.header('Sec-Fetch-Site')
+    const origin = c.req.header('Origin')
+    // "Ours" is the origin this request was addressed to, and the configured
+    // public one. Both, because `wrangler dev` rewrites a local browser's
+    // Origin to the configured route host while PUBLIC_BASE_URL still says
+    // localhost — and in production the two are simply the same string.
+    const ours = new Set([new URL(c.req.url).origin, new URL(c.env.PUBLIC_BASE_URL).origin])
+    const crossSite = (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') || (origin && !ours.has(origin))
+    if (crossSite) {
+      console.warn('[auth] refused cross-site write', { method, path: c.req.path, fetchSite, origin, ours: [...ours] })
+      return c.json({ error: 'cross-site request refused' }, 403)
+    }
     await next()
   }
 }

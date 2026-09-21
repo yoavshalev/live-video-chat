@@ -139,6 +139,8 @@ class Widget {
   private inviteExpiresAt: number | null = null
   /** Who is inviting us, when the server says. Falls back to the site label. */
   private inviteAgentName: string | null = null
+  /** What the call view was last rendered for; see render(). */
+  private callRenderKey: string | null = null
 
   private view: View = 'collapsed'
   private socket: ReconnectingSocket | null = null
@@ -615,6 +617,19 @@ class Widget {
     const root = this.ensureMount()
     const container = root.querySelector('.fl-container') ?? el('div', { class: 'fl-container' })
     if (!container.parentNode) root.append(container)
+
+    // During a call the panel is left alone. Every render rebuilds it, and an
+    // iframe that is rebuilt — or even moved — reloads, which drops the media
+    // session. Presence updates, queue changes and reconnect snapshots all
+    // arrive mid-call and none of them change what the call view shows; only
+    // a different call or an error state does.
+    if (this.view === 'call' && this.call) {
+      const key = `${this.call.callId}|${this.callErrored}|${this.iframeFallback}`
+      if (key === this.callRenderKey && container.querySelector('.call-frame')) return
+      this.callRenderKey = key
+    } else {
+      this.callRenderKey = null
+    }
 
     this.mount?.setAttribute(
       'data-mode',

@@ -21,7 +21,7 @@
 
 import { Hono } from 'hono'
 import type { AppEnv } from './types'
-import { agentIdentity } from './lib/auth'
+import { agentIdentity, rejectCrossSiteWrites } from './lib/auth'
 
 import * as health from './routes/health'
 import * as widget from './routes/widget'
@@ -50,17 +50,31 @@ app.use('*', async (c, next) => {
   await next()
   if (c.res.status === 101 || c.res.webSocket) return
   if (c.res.headers.has('X-Robots-Tag')) return
+  const headers: Record<string, string> = { 'X-Robots-Tag': 'noindex, nofollow' }
+  // The dashboard is never framed by anyone — a framed control plane is a
+  // clickjacking target. The call page sets its own, site-specific policy.
+  if (c.req.path === '/host' || c.req.path.startsWith('/host/')) {
+    headers['Content-Security-Policy'] = "frame-ancestors 'none'"
+    headers['X-Frame-Options'] = 'DENY'
+  }
   try {
-    c.res.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    for (const [name, value] of Object.entries(headers)) c.res.headers.set(name, value)
   } catch {
     // A response handed back by the Cache API has immutable headers, and setting
     // one throws. Rebuilding it is cheap (the body is a stream, not a copy) and
-    // beats a 500 on a static asset for the sake of a robots hint.
+    // beats a 500 on a static asset for the sake of a header.
     const mutable = new Response(c.res.body, c.res)
-    mutable.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    for (const [name, value] of Object.entries(headers)) mutable.headers.set(name, value)
     c.res = mutable
   }
 })
+
+// Cookie-authenticated writes must come from our own origin. Browsers send
+// Sec-Fetch-Site and/or Origin on every cross-site request, and nothing but a
+// browser carries the session cookie, so this is the dashboard's CSRF guard.
+app.use('/host', rejectCrossSiteWrites())
+app.use('/host/*', rejectCrossSiteWrites())
+app.use('/api/host/*', rejectCrossSiteWrites())
 
 health.register(app)
 widget.register(app)

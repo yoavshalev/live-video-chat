@@ -261,6 +261,15 @@ export async function applyDbOp(env: Env, op: DbOp): Promise<void> {
     }
 
     case 'queue_session_status': {
+      if (op.status === 'waiting') {
+        // Back in line after a failed call. Clearing ended_at matters: the
+        // generic branch below would stamp it, and an active session would
+        // read as finished everywhere the history is shown.
+        await env.DB.prepare(`UPDATE queue_sessions SET status = 'waiting', ended_at = NULL, agent_id = COALESCE(?, agent_id) WHERE id = ?`)
+          .bind(op.agentId ?? null, op.id)
+          .run()
+        return
+      }
       const timestampColumn =
         op.status === 'invited'
           ? 'invited_at'

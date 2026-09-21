@@ -23,7 +23,7 @@ import type { AppEnv } from '../types'
 import { BASE_STYLES, CALL_STYLES } from '../ui/styles'
 import { SDK_PATH } from './sdk'
 import { isSafeId, LIMITS } from '../shared/validation'
-import { frameAncestorsFor, getSite, listSites } from '../lib/sites'
+import { frameAncestorsFor, getSite } from '../lib/sites'
 import { originAllowed } from '../shared/domains'
 import callAppSource from '../generated/call.js'
 
@@ -81,16 +81,27 @@ export function register(app: Hono<AppEnv>): void {
     // origins configured for the sites are listed — the same allow-list that
     // guards every other embed entry point, reused so there is one answer to
     // "which origins are ours" rather than two that can drift.
-    const site = siteId ? await getSite(c.env, siteId) : null
-    const domains = site
-      ? site.allowedDomains
-      : (await listSites(c.env)).filter((s2) => s2.enabled).flatMap((s2) => s2.allowedDomains)
+    //
+    // A visitor's call is framed by the widget on ONE site, so only that site's
+    // domains may frame it — and without a siteId, nobody may. An agent's call
+    // is framed by the dashboard, which is us. Listing every site's domains for
+    // every call would let one customer's page frame another customer's call.
+    const selfOrigin = new URL(c.env.PUBLIC_BASE_URL).origin
+    const site = who === 'visitor' && siteId ? await getSite(c.env, siteId) : null
+    const domains = site?.enabled ? site.allowedDomains : []
     const frameOrigins = frameAncestorsFor(domains)
 
     // Only an origin the widget could legitimately be running on becomes a
     // postMessage target; anything else falls back to no parent, which makes the
     // call page use its HTTP path instead of shouting at '*'.
-    const parentOrigin = claimedParent && originAllowed(claimedParent, domains) ? claimedParent : null
+    const parentOrigin =
+      who === 'host'
+        ? claimedParent === selfOrigin
+          ? selfOrigin
+          : null
+        : claimedParent && originAllowed(claimedParent, domains)
+          ? claimedParent
+          : null
 
     const boot = {
       callId,
@@ -135,6 +146,14 @@ export function register(app: Hono<AppEnv>): void {
         <!-- Shown only if the browser refuses to start audio without a gesture. -->
         <button id="btn-hear" class="hear hidden" type="button">Tap to hear</button>
 
+        <!-- Our microphone is off and nobody asked for that: the browser refused
+             it, or the device handed over silence. Said here, on the screen of
+             the person who can fix it, not only as "mic off" on the other side. -->
+        <div id="mic-off" class="mic-off hidden" role="alert">
+          <span id="mic-off-text">Your microphone is off.</span>
+          <button id="mic-off-fix" class="btn-primary" type="button">Turn it on</button>
+        </div>
+
         <!-- In-call audio and video settings. Both sides get this, because "I
              can't hear you" is fixed on whichever side has the wrong device, and
              the meters say which side that is. -->
@@ -143,6 +162,7 @@ export function register(app: Hono<AppEnv>): void {
             <strong>Audio &amp; video</strong>
             <button id="settings-close" class="btn-ghost" type="button">Done</button>
           </div>
+          <p id="audio-status" class="tiny" style="margin:0"></p>
           <div>
             <label for="call-mic">Microphone</label>
             <select id="call-mic"></select>
@@ -160,6 +180,7 @@ export function register(app: Hono<AppEnv>): void {
             <label for="call-cam">Camera</label>
             <select id="call-cam"></select>
           </div>
+          <label id="auto-join-call-wrap" class="check tiny muted hidden"><input id="auto-join-call" type="checkbox" /> Join right away next time, without the camera check</label>
           <p id="settings-hint" class="tiny muted" style="margin:0"></p>
         </div>
         <div id="timer" class="timer hidden"><span class="dot busy" aria-hidden="true"></span><span id="elapsed" class="mono">0:00</span></div>
@@ -186,6 +207,8 @@ export function register(app: Hono<AppEnv>): void {
                      possible answer to "is my mic working?" before anyone joins. -->
                 <div class="level-row"><span class="tiny muted">Say something</span><div class="level"><i id="preview-level"></i></div></div>
               </div>
+              <!-- Agents only (shown from the client): skip this screen next time. -->
+              <label id="auto-join-wrap" class="check tiny muted hidden"><input id="auto-join" type="checkbox" /> Skip this check next time and join right away (this browser)</label>
             </div>
 
             <div id="overlay-error" class="error-box hidden"></div>

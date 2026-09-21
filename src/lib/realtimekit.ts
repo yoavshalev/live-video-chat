@@ -229,7 +229,7 @@ async function addBoth(
   meetingId: string,
   input: { callId: string; hostName: string; visitorName: string; visitorId: string; hostId: string }
 ): Promise<ProvisionedCall> {
-  const [host, visitor] = await Promise.all([
+  const results = await Promise.allSettled([
     addParticipant(creds, meetingId, {
       name: input.hostName,
       presetName: env.REALTIMEKIT_HOST_PRESET,
@@ -241,6 +241,18 @@ async function addBoth(
       customParticipantId: input.visitorId
     })
   ])
+
+  // One seat created and the other refused (a bad preset name, a flaky
+  // request) must not leave a live token behind in a meeting nobody will use.
+  // The meeting record itself has no delete endpoint; without participants it
+  // is inert.
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (failed) {
+    const created = results.filter((r): r is PromiseFulfilledResult<Participant> => r.status === 'fulfilled').map((r) => r.value.id)
+    if (created.length > 0) await releaseMeeting(creds, meetingId, created)
+    throw failed.reason
+  }
+  const [host, visitor] = results.map((r) => (r as PromiseFulfilledResult<Participant>).value) as [Participant, Participant]
 
   return {
     meetingId,

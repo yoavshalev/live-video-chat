@@ -325,6 +325,17 @@ export class LiveHostRoom extends DurableObject<Env> {
       // Stored, not broadcast. The tokens are handed out one request at a time to
       // a caller that already proved it holds the call secret.
       await this.ctx.storage.put(tokensKey(callId), tokens)
+      // The call may have ended while RealtimeKit was still creating it — the
+      // visitor declined, the invitation expired, the agent went offline.
+      // Nothing will ever redeem these tokens, so revoke them now rather than
+      // leave a meeting open with two live tokens for it. (No fetch happens
+      // between this load and the dispatch, so the check cannot go stale.)
+      const alive = Object.values((await this.load()).calls).some((c) => c.callId === callId)
+      if (!alive) {
+        console.warn('[room] call ended during provisioning; releasing', callId)
+        await this.release(callId, result.meetingId)
+        return
+      }
       await this.dispatch({ t: 'CALL_PROVISIONED', now: Date.now(), callId, meetingId: result.meetingId })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -597,11 +608,23 @@ export class LiveHostRoom extends DurableObject<Env> {
         await this.dispatch({ t: 'VISITOR_DECLINE_INVITE', now, commandId: message.payload.commandId, visitorId, ids: this.idPool() })
         return
       case 'CALL_MEDIA_JOINED':
-        await this.dispatch({ t: 'MEDIA_JOINED', now, callId: message.payload.callId, who: agentId ? 'host' : 'visitor' })
+      case 'CALL_MEDIA_LEFT': {
+        // Your OWN call only, found from the socket's identity; the payload's
+        // callId has to agree with it. Otherwise any dashboard could mark
+        // another agent's call as connected, or start its disconnect clock.
+        const state = await this.load()
+        const call = agentId
+          ? state.calls[agentId]
+          : visitorId
+            ? Object.values(state.calls).find((c) => c.visitorId === visitorId)
+            : undefined
+        if (!call || call.callId !== message.payload.callId) return
+        await this.dispatch({
+          t: message.type === 'CALL_MEDIA_JOINED' ? 'MEDIA_JOINED' : 'MEDIA_LEFT',
+          now, callId: call.callId, who: agentId ? 'host' : 'visitor'
+        })
         return
-      case 'CALL_MEDIA_LEFT':
-        await this.dispatch({ t: 'MEDIA_LEFT', now, callId: message.payload.callId, who: agentId ? 'host' : 'visitor' })
-        return
+      }
     }
   }
 
