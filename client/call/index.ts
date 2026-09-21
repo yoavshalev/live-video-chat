@@ -189,8 +189,13 @@ let lastMediaError: string | null = null
 /** The output device we want, applied to every audio element as it gets a stream. */
 let wantedSinkId: string | null = null
 let sinkError: string | null = null
-/** The microphone track we already tried to recover from a platform mute. */
-let recoveredTrack: MediaStreamTrack | null = null
+/**
+ * Automatic microphone recovery runs ONCE per call. A device that keeps
+ * handing back a muted track would otherwise be toggled every second
+ * forever; after the one attempt, only the banner's button retries.
+ */
+let autoRecovered = false
+let recovering = false
 let watchedTrack: MediaStreamTrack | null = null
 
 // ─── Talking to whoever framed us ────────────────────────────────────────────
@@ -619,9 +624,8 @@ function watchTrack(track: MediaStreamTrack | null): void {
  * phone keeps live, so this is the fix for a track the platform muted.
  */
 async function recoverMicrophone(): Promise<void> {
-  if (!meeting) return
-  const before = meeting.self.audioTrack ?? null
-  recoveredTrack = before
+  if (!meeting || recovering) return
+  recovering = true
   els.micOffFix.disabled = true
   try {
     await meeting.self.disableAudio()
@@ -632,6 +636,7 @@ async function recoverMicrophone(): Promise<void> {
     lastMediaError = describe(error)
     console.warn('[call] microphone recovery failed', error)
   } finally {
+    recovering = false
     els.micOffFix.disabled = false
   }
   micMeter.attach(meeting.self.audioTrack ?? null)
@@ -903,9 +908,10 @@ async function join(): Promise<void> {
 function reconcileAudio(): void {
   if (!meeting) return
   const own = meeting.self.audioTrack ?? null
-  if (meeting.self.audioEnabled && own && selfTrackMuted() && recoveredTrack !== own) {
-    // First sight of a platform-muted track: fix it without asking. If the
-    // new track is muted too, the banner and its button take over.
+  if (meeting.self.audioEnabled && own && selfTrackMuted() && !autoRecovered && !recovering) {
+    // First sight of a platform-muted track: fix it without asking, once. If
+    // the re-acquired track is muted too, the banner and its button take over.
+    autoRecovered = true
     void recoverMicrophone()
     return
   }
