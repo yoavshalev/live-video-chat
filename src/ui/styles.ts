@@ -374,7 +374,7 @@ body { background: #000; overflow: hidden; }
   position: absolute; inset: 0; display: flex; flex-direction: column; text-align: center;
   padding: 24px; background: radial-gradient(60% 60% at 50% 40%, #16181d 0%, #0a0b0d 100%); z-index: 3;
   /* Taller than the stage? Scroll from the top rather than centring and cutting
-     the top of the preview off. `margin: auto` on .inner centres when it fits. */
+     the top of the preview off. margin:auto on .inner centres it when it fits. */
   overflow: auto;
 }
 .overlay .inner { max-width: 420px; width: 100%; display: grid; gap: 14px; justify-items: center; margin: auto; }
