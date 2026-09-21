@@ -23,6 +23,8 @@
 
 import { spawnSync } from 'node:child_process'
 import { webcrypto as crypto } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 export const PBKDF2_ITERATIONS = 300_000
 
@@ -67,12 +69,23 @@ function parseArgs(argv) {
 /** Set from --config in main(); every wrangler call below carries it. */
 let wranglerConfig = null
 
+/**
+ * Runs wrangler without a shell, so the SQL reaches it as one argument. Going
+ * through `npx` on Windows means cmd.exe, which re-splits every argument on
+ * spaces and turns a SELECT into "Unknown arguments: id,, name,, …".
+ */
+function wrangler(args) {
+  const local = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url))
+  if (existsSync(local)) return spawnSync(process.execPath, [local, ...args], { encoding: 'utf8' })
+  // No local install (e.g. run outside the repo): fall back to npx, quoting for cmd.exe.
+  const quote = (a) => (process.platform === 'win32' && /[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)
+  return spawnSync('npx', ['wrangler', ...args].map(quote), { encoding: 'utf8', shell: process.platform === 'win32' })
+}
+
 function d1(sql, remote) {
   const database = process.env.D1_DATABASE ?? 'founderlive'
   const flags = [remote ? '--remote' : '--local', ...(wranglerConfig ? ['--config', wranglerConfig] : [])]
-  const result = spawnSync('npx', ['wrangler', 'd1', 'execute', database, ...flags, '--command', sql], {
-    encoding: 'utf8', shell: process.platform === 'win32'
-  })
+  const result = wrangler(['d1', 'execute', database, ...flags, '--command', sql])
   if (result.status !== 0) {
     console.error(result.stdout, result.stderr)
     throw new Error(`wrangler d1 execute failed (${result.status})`)
