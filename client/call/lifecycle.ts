@@ -81,6 +81,12 @@ export async function setup(): Promise<void> {
   const meeting = call.meeting
 
   wireSelf()
+  // A headset plugged in, or a device the browser swapped underneath us: refresh
+  // the pickers and re-check whether audio is actually flowing.
+  meeting.self.on('deviceUpdate', () => {
+    void refreshDevices()
+    reconcileAudio()
+  })
   els.preview.classList.remove('hidden')
   // Lays the overlay out around the preview (beside the pickers on a wide stage).
   els.overlay.classList.add('setup')

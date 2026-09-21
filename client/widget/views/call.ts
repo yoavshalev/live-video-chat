@@ -9,6 +9,7 @@
  */
 
 import type { Widget } from '../widget'
+import { COPY, withName } from '../../../src/config'
 import { el, replace } from '../dom'
 
 export function renderCall(w: Widget, body: HTMLElement, panel: HTMLElement): void {
@@ -70,7 +71,7 @@ export function renderEnded(w: Widget, body: HTMLElement): void {
   w.callErrored = false
   replace(
     body,
-    el('h2', { class: 'title', text: `Thanks for talking to ${w.name()}` }),
+    el('h2', { class: 'title', text: withName(COPY.endedTitle, w.name()) }),
     el('p', { class: 'text', text: 'Thanks for the conversation.' }),
     el('button', { class: 'btn primary', attrs: { type: 'button' }, text: 'Close', on: { click: () => w.close() } })
   )
