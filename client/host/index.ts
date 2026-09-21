@@ -395,6 +395,8 @@ function renderQueueEntry(entry: QueueEntryView, index: number): HTMLElement {
 function renderAgents(): void {
   const live = agents.filter((a) => a.status !== 'offline')
   els.agentsLive.textContent = `${live.length} live`
+  // The Agents tab shows the same status next to each team member.
+  renderTeam()
   if (agents.length === 0) {
     els.agentsLiveList.replaceChildren(text('div', 'empty', 'No agents have connected yet.'))
     return
