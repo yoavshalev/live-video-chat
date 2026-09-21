@@ -78,10 +78,16 @@ function wranglerRun(wranglerArgs, options = {}) {
   run(process.execPath, [wrangler, ...wranglerArgs, '--config', config], options)
 }
 
-/** Runs wrangler and returns what it printed, or null if it failed. */
+/**
+ * Runs wrangler and returns its stdout, or null if it failed. Only stdout:
+ * wrangler puts warnings such as "[ERROR] Failed to write to log file" on
+ * stderr while still exiting 0, and a bracket from one of those inside what we
+ * parse as JSON would read as "no secrets" — and regenerate a session secret
+ * that was fine, signing everybody out on an otherwise routine deploy.
+ */
 function wranglerCapture(wranglerArgs) {
   const result = spawnSync(process.execPath, [wrangler, ...wranglerArgs, '--config', config], { encoding: 'utf8' })
-  return result.status === 0 ? `${result.stdout}\n${result.stderr}` : null
+  return result.status === 0 ? result.stdout : null
 }
 
 step(inWorkersBuilds ? 'Build' : 'Check')
@@ -94,12 +100,13 @@ step('Deploy')
 wranglerRun(['deploy', ...passthrough])
 
 step('Secrets')
-const listed = wranglerCapture(['secret', 'list'])
-if (listed === null) {
-  console.warn('Could not list secrets; skipping. Set them by hand if this is a new deployment:')
+const names = parseSecretNames(wranglerCapture(['secret', 'list', '--format', 'json']))
+if (names === null) {
+  // Not knowing is not the same as knowing there are none. Nothing is written.
+  console.warn('Could not read the list of secrets; leaving them alone. On a new deployment, set them by hand:')
   console.warn('  npx wrangler secret put SESSION_SECRET\n  npx wrangler secret put CLOUDFLARE_ACCOUNT_ID')
 } else {
-  const existing = new Set(parseSecretNames(listed))
+  const existing = new Set(names)
 
   if (existing.has('SESSION_SECRET')) console.log('SESSION_SECRET: set')
   else putSecret('SESSION_SECRET', randomBytes(32).toString('base64url'), 'generated')
@@ -116,14 +123,18 @@ if (listed === null) {
   }
 }
 
-function parseSecretNames(output) {
-  // `wrangler secret list` prints a JSON array, sometimes after a banner line.
-  const start = output.indexOf('[')
-  if (start < 0) return []
+/** The secret names in `wrangler secret list --format json` output, or null if it cannot be trusted. */
+function parseSecretNames(stdout) {
+  if (stdout === null) return null
+  // A JSON array on its own; tolerate a banner line before it, nothing after.
+  const start = stdout.indexOf('[')
+  if (start < 0 || !stdout.trimEnd().endsWith(']')) return null
   try {
-    return JSON.parse(output.slice(start, output.lastIndexOf(']') + 1)).map((secret) => secret.name)
+    const parsed = JSON.parse(stdout.slice(start))
+    if (!Array.isArray(parsed) || !parsed.every((secret) => typeof secret?.name === 'string')) return null
+    return parsed.map((secret) => secret.name)
   } catch {
-    return []
+    return null
   }
 }
 
