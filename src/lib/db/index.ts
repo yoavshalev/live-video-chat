@@ -21,6 +21,7 @@ export {
   countAgents,
   countEnabledAdmins,
   createAgent,
+  createFirstAdmin,
   getAgentByEmail,
   getAgentById,
   listAgents,

@@ -17,6 +17,7 @@
  * must not ride along to any third party the page happens to touch.
  */
 
+import { publicBaseUrl } from '../lib/base-url'
 import { Hono } from 'hono'
 import { html, raw } from 'hono/html'
 import type { AppEnv } from '../types'
@@ -86,7 +87,7 @@ export function register(app: Hono<AppEnv>): void {
     // domains may frame it — and without a siteId, nobody may. An agent's call
     // is framed by the dashboard, which is us. Listing every site's domains for
     // every call would let one customer's page frame another customer's call.
-    const selfOrigin = new URL(c.env.PUBLIC_BASE_URL).origin
+    const selfOrigin = new URL(publicBaseUrl(c.env, c.req.raw)).origin
     const site = who === 'visitor' && siteId ? await getSite(c.env, siteId) : null
     const domains = site?.enabled ? site.allowedDomains : []
     const frameOrigins = frameAncestorsFor(domains)

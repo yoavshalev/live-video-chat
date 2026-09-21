@@ -169,6 +169,10 @@ async function main() {
   const anonymousDashboard = await fetch(`${BASE}/host`, { redirect: 'manual', headers: { Accept: 'text/html' } })
   check('the dashboard is not public', anonymousDashboard.status === 302, `got ${anonymousDashboard.status}`)
 
+  const setup = await fetch(`${BASE}/setup`, { redirect: 'manual' })
+  check('first-run setup is gone once an admin exists',
+    setup.status === 302 && (setup.headers.get('location') ?? '').endsWith('/host/login'), `got ${setup.status}`)
+
   const badLogin = await fetch(`${BASE}/host/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

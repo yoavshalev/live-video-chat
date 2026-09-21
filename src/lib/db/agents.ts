@@ -77,14 +77,23 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export type AgentResult = { ok: true; agent: AgentRecord } | { ok: false; reason: string; status: 400 | 404 | 409 }
 
-export async function createAgent(
-  env: Env,
-  input: { name: string; email: string; passwordHash: string | null; role: AgentRole }
-): Promise<AgentResult> {
+type NewAgentFields = { ok: true; name: string; email: string } | { ok: false; reason: string; status: 400 }
+
+function newAgentFields(input: { name: string; email: string }): NewAgentFields {
   const name = input.name.trim().replace(/\s+/g, ' ').slice(0, 60)
   const email = normalizeEmail(input.email).slice(0, 120)
   if (!name) return { ok: false, reason: 'Name is required.', status: 400 }
   if (!EMAIL_SHAPE.test(email)) return { ok: false, reason: 'That does not look like an email address.', status: 400 }
+  return { ok: true, name, email }
+}
+
+export async function createAgent(
+  env: Env,
+  input: { name: string; email: string; passwordHash: string | null; role: AgentRole }
+): Promise<AgentResult> {
+  const fields = newAgentFields(input)
+  if (!fields.ok) return fields
+  const { name, email } = fields
   if (await getAgentByEmail(env, email)) return { ok: false, reason: 'An agent with that email already exists.', status: 409 }
 
   // Ids are what the round-robin sorts by on ties and what appears in call
@@ -100,6 +109,30 @@ export async function createAgent(
     .bind(id, name, email, input.passwordHash, input.role, now)
     .run()
   return { ok: true, agent: { id, name, email, password_hash: input.passwordHash, role: input.role, enabled: 1, created_at: now, last_login_at: null } }
+}
+
+/**
+ * The one insert a fresh deployment makes, from /setup. Guarded in SQL rather
+ * than by count-then-insert, so two people racing for a brand-new deployment
+ * cannot both become its first admin: exactly one row is written, ever.
+ */
+export async function createFirstAdmin(
+  env: Env,
+  input: { name: string; email: string; passwordHash: string }
+): Promise<AgentResult> {
+  const fields = newAgentFields(input)
+  if (!fields.ok) return fields
+  const { name, email } = fields
+  const id = slugify(name)
+  const now = Date.now()
+  const result = await env.DB.prepare(
+    `INSERT INTO agents (id, name, email, password_hash, role, enabled, created_at, last_login_at)
+     SELECT ?, ?, ?, ?, 'admin', 1, ?, NULL WHERE NOT EXISTS (SELECT 1 FROM agents)`
+  )
+    .bind(id, name, email, input.passwordHash, now)
+    .run()
+  if (!result.meta.changes) return { ok: false, reason: 'This deployment already has an admin.', status: 409 }
+  return { ok: true, agent: { id, name, email, password_hash: input.passwordHash, role: 'admin', enabled: 1, created_at: now, last_login_at: null } }
 }
 
 export async function updateAgent(

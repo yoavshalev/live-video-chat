@@ -18,7 +18,8 @@ export interface Env {
    * in the agents table; there can be any number of them.
    */
   ORG_ID: string
-  PUBLIC_BASE_URL: string
+  /** Optional. Unset, the origin each request arrived on; see lib/base-url.ts. */
+  PUBLIC_BASE_URL?: string
   HOST_AUTH_MODE: 'password' | 'access'
   REALTIMEKIT_HOST_PRESET: string
   REALTIMEKIT_VISITOR_PRESET: string

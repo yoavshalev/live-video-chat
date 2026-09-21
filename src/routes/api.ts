@@ -12,6 +12,7 @@
  * founder" costs more conversions than the abuse costs us today.
  */
 
+import { publicBaseUrl } from '../lib/base-url'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../types'
@@ -49,6 +50,7 @@ export function register(app: Hono<AppEnv>): void {
     if (!resolution.ok) return c.json({ error: resolution.reason }, resolution.status)
 
     const snapshot = await room(c.env).snapshot()
+    const base = publicBaseUrl(c.env, c.req.raw)
     return c.json(
       {
         site: {
@@ -62,8 +64,8 @@ export function register(app: Hono<AppEnv>): void {
         },
         host: snapshot.hostProfile,
         presence: snapshot.presence,
-        wsUrl: `${c.env.PUBLIC_BASE_URL.replace(/^http/, 'ws')}/ws/widget`,
-        callUrl: `${c.env.PUBLIC_BASE_URL}/call`
+        wsUrl: `${base.replace(/^http/, 'ws')}/ws/widget`,
+        callUrl: `${base}/call`
       },
       200,
       { ...corsHeaders(resolution.origin), 'Cache-Control': 'public, max-age=5' }

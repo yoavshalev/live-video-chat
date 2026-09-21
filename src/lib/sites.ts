@@ -12,6 +12,7 @@
  * because it is the part that has to be right, and that file has the tests.
  */
 
+import { publicBaseUrl } from './base-url'
 import type { Env, SiteRow } from '../types'
 import { normalizeDomain, originAllowed } from '../shared/domains'
 
@@ -119,7 +120,7 @@ export async function resolveSite(env: Env, siteId: string | null, request: Requ
 
   const origin = request.headers.get('Origin')
   if (!origin) {
-    const selfOrigin = new URL(env.PUBLIC_BASE_URL).origin
+    const selfOrigin = new URL(publicBaseUrl(env, request)).origin
     const referer = request.headers.get('Referer')
     if (referer && referer.startsWith(selfOrigin)) return { ok: true, site, origin: selfOrigin }
     return { ok: false, status: 403, reason: 'missing origin' }

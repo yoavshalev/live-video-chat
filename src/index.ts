@@ -73,6 +73,7 @@ app.use('*', async (c, next) => {
 // Cookie-authenticated writes must come from our own origin. Browsers send
 // Sec-Fetch-Site and/or Origin on every cross-site request, and nothing but a
 // browser carries the session cookie, so this is the dashboard's CSRF guard.
+app.use('/setup', rejectCrossSiteWrites())
 app.use('/host', rejectCrossSiteWrites())
 app.use('/host/*', rejectCrossSiteWrites())
 app.use('/api/host/*', rejectCrossSiteWrites())

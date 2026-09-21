@@ -1,6 +1,7 @@
 # Live Video Chat
 
 [![Sponsored on SponsoredBy.io](https://sponsoredby.io/embed/yoavshalev.svg?corners=rounded&size=small&theme=dark&color=green&logo=1)](https://sponsoredby.io/yoavshalev)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yoavshalev/live-video-chat)
 
 A "talk to a real person right now" button for your websites.
 
@@ -132,20 +133,56 @@ queue, invitations, inbox — works without them.
 
 ## Deploying to Cloudflare
 
-### 1. Configuration file
+### One click
 
-`wrangler.jsonc` is a **template**: it has placeholder ids and an example
-hostname. Copy it and keep your real values out of git:
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yoavshalev/live-video-chat)
+
+The button copies this repository into your GitHub account, creates the D1
+database, KV namespace, R2 bucket and Durable Object on your Cloudflare account,
+and deploys the Worker to your `*.workers.dev` subdomain. Pushes to your copy
+redeploy it.
+
+It asks for three secrets. Two come from RealtimeKit, Cloudflare's hosted
+WebRTC. You can add them afterwards: everything except starting a call works
+without them, and the dashboard says so until they are set.
+
+1. **`REALTIMEKIT_APP_ID`** — <https://dash.cloudflare.com/?to=/:account/realtime/kit>
+   → **Create App** → copy the App ID. Create it in the dashboard, not through
+   the API, so it comes with the default presets this code expects.
+2. **`REALTIMEKIT_API_TOKEN`** — <https://dash.cloudflare.com/profile/api-tokens>
+   → **Create Token** with the **Realtime → RealtimeKit Admin** permission.
+3. **`CLOUDFLARE_ACCOUNT_ID`** — on your dashboard's overview page. The deploy
+   fills this in by itself when it can.
+
+The session-signing secret is generated for you, and the database schema is
+applied as part of every deploy.
+
+When it finishes, open `https://founderlive.<your-subdomain>.workers.dev/setup`
+and create the first admin — you. Do it right away: until someone has, that page
+is open to whoever finds it first, as with any fresh install. Then, on the
+dashboard: **Embed** tab → create a site, add its domain, copy the snippet into
+your website. **Clip** tab → record an intro. **Agents** tab → add your
+colleagues. Go live.
+
+To put it on your own domain later, add a route in your copy's `wrangler.jsonc`
+(the comments there show how) and push. Nothing else changes: the Worker reads
+its own URL from each request.
+
+### By hand
+
+The same steps from a terminal. You need Node 20+ and `npx wrangler login`.
+
+**1. Configuration.** `wrangler.jsonc` is a template with placeholder ids. Copy
+it and keep your real values out of git:
 
 ```bash
 cp wrangler.jsonc wrangler.prod.local.jsonc     # any wrangler.*.local.jsonc is gitignored
 ```
 
-Every remote command below takes `--config wrangler.prod.local.jsonc`. (You can
-also just edit `wrangler.jsonc` in place if you are not planning to contribute
-back.)
+Every remote command below takes `--config wrangler.prod.local.jsonc`. (Editing
+`wrangler.jsonc` in place also works if you are not planning to contribute back.)
 
-### 2. Cloudflare resources
+**2. Resources.**
 
 ```bash
 npx wrangler d1 create founderlive              # → database_id
@@ -153,28 +190,26 @@ npx wrangler kv namespace create RATE           # → id
 npx wrangler r2 bucket create founderlive-media
 ```
 
-Paste the D1 `database_id` and the KV `id` into your config. Then set:
+Paste the D1 `database_id` and the KV `id` into your config. Optionally set
+`ORG_ID` — any short slug naming your organization; keep it stable forever, it
+names the Durable Object and the row that holds your intro clip — and a custom
+domain (`routes`; the comments in the file show how). The Worker, D1 database
+and R2 bucket are named `founderlive`, the project's internal name, which also
+appears in the widget's JavaScript API (`FounderLive.init(...)`) and its DOM
+events. Renaming them is not necessary.
 
-| Field | Value |
-|---|---|
-| `routes[0].pattern` | The hostname the Worker will live on, e.g. `live.example.com`. Must be a zone on your account; `custom_domain: true` creates the DNS record and certificate on first deploy. |
-| `vars.PUBLIC_BASE_URL` | `https://` + that hostname. Baked into the WebSocket URL, the call iframe and the embed snippet, so a wrong value looks like a CORS bug. |
-| `vars.ORG_ID` | Any short slug naming your organization. Keep it stable forever: it names the Durable Object and the row that holds your intro clip. |
-| `account_id` | Optional; wrangler asks otherwise. |
+**3. RealtimeKit.** The two secrets described under "One click", plus your
+account id:
 
-The Worker, D1 database and R2 bucket are named `founderlive` — the project's
-internal name, which also appears in the widget's JavaScript API
-(`FounderLive.init(...)`) and its DOM events. Renaming them is not necessary.
+```bash
+C=wrangler.prod.local.jsonc
+npx wrangler secret put REALTIMEKIT_APP_ID     --config $C
+npx wrangler secret put REALTIMEKIT_API_TOKEN  --config $C
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID  --config $C   # or let the deploy detect it
+```
 
-### 3. RealtimeKit
-
-RealtimeKit is Cloudflare's hosted WebRTC. Create the app **in the dashboard**,
-not through the API, so it comes with the default presets this code expects.
-
-1. <https://dash.cloudflare.com/?to=/:account/realtime/kit> → **Create App** →
-   copy the **App ID**.
-2. <https://dash.cloudflare.com/profile/api-tokens> → **Create Token** with the
-   **Realtime → RealtimeKit Admin** permission → copy the token.
+Secrets, never `vars`: a plaintext var of the same name silently overrides a
+secret on deploy.
 
 **Preset names use underscores.** Cloudflare's docs show `group-call-host`, but
 an app is actually created with `group_call_host` and `group_call_participant`,
@@ -183,50 +218,38 @@ a real call is accepted, so after deploying check
 `GET https://<your host>/api/host/realtimekit` (signed in): it lists the
 presets your app really has and whether the configured names match.
 
-### 4. Secrets
-
-Secrets, never `vars` — a plaintext var of the same name silently overrides a
-secret on deploy.
+**4. Deploy.**
 
 ```bash
-C=wrangler.prod.local.jsonc
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID  --config $C
-npx wrangler secret put REALTIMEKIT_APP_ID     --config $C
-npx wrangler secret put REALTIMEKIT_API_TOKEN  --config $C
-npx wrangler secret put SESSION_SECRET         --config $C   # any long random string, e.g. openssl rand -base64 48
+npm run deploy -- --config $C
 ```
 
-### 5. Schema and deploy
-
-```bash
-npx wrangler d1 migrations apply founderlive --remote --config $C
-npm run deploy -- --config $C        # refuses template placeholders, then builds, typechecks, tests, deploys
-```
+This refuses template placeholders, builds, typechecks and tests, applies the
+D1 migrations, deploys, and then sets `SESSION_SECRET` (generated) and
+`CLOUDFLARE_ACCOUNT_ID` (detected) if they are missing. An existing value is
+never touched: rotating the session secret signs everyone out.
 
 Do **not** run `npm run db:seed:remote` unless you want the two example sites;
 you will create your real sites on the dashboard. The local-only seed file with
 the `dev@example.com` admin is never applied remotely.
 
-### 6. Your first admin
-
-There is no sign-up page, on purpose. Create the first admin from your
-terminal; the password is printed once.
+**5. Your first admin.** Open `https://<your host>/setup` right after deploying
+and create yourself, as under "One click". Or from the terminal, where the
+password is printed once:
 
 ```bash
 node scripts/agent.mjs add --name "Ada" --email ada@example.com --role admin --remote --config $C
 ```
 
-Sign in at `https://<your host>/host`. On the **Embed** tab create a site, add
-its domain, copy the snippet into your website. On the **Clip** tab record an
-intro. On the **Agents** tab add your colleagues. Go live.
-
 ### Updating
 
 ```bash
 git pull
-npx wrangler d1 migrations apply founderlive --remote --config $C
-npm run deploy -- --config $C
+npm run deploy -- --config $C      # migrations are part of the deploy
 ```
+
+With the button: pull this repository into your copy and push; the build does
+the rest.
 
 Deploy while nobody is live if you can: a deploy that changes the Durable
 Object's stored state shape resets it (queue, presence), which is harmless
@@ -312,14 +335,15 @@ npx wrangler secret put CF_ACCESS_AUD         --config $C   # the application's 
 npx wrangler secret put ALLOWED_HOST_EMAIL    --config $C   # optional: comma-separated allow-list on top of the policy
 ```
 
-`workers_dev` is `false` because a `*.workers.dev` hostname is an
-unauthenticated route that bypasses any Access policy bound to the real domain.
+With Access, set `workers_dev` to `false` and use a custom domain: a
+`*.workers.dev` hostname is an unauthenticated route that bypasses any Access
+policy bound to the real domain.
 
 Dashboard writes are refused when the browser reports them as cross-site
 (`Sec-Fetch-Site` / `Origin`), on top of the `SameSite=Lax` cookie; dashboard
 pages send `frame-ancestors 'none'`; and the two credentials published for
 local development — the example `SESSION_SECRET` and the `dev@example.com`
-admin — are refused outright unless `PUBLIC_BASE_URL` is localhost.
+admin — are refused outright anywhere but localhost.
 
 ---
 

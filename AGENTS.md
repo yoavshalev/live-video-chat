@@ -18,7 +18,7 @@ src/shared/machine/        the state machine — a PURE reducer, (state, command
 src/durable/               the one Durable Object. LiveHostRoom.ts owns sockets, alarms and effects;
                              commands.ts turns a socket message into a command (identity checks live here)
 src/routes/                HTTP routes, one file per group; routes/host/ is the dashboard (tabs/ = one file per tab)
-src/lib/                   auth, access (Cloudflare Access), csrf, password, sites, db/ (one file per table group),
+src/lib/                   auth, access (Cloudflare Access), csrf, base-url, password, sites, db/ (one file per table group),
                              realtimekit, ratelimit
 src/ui/styles/             CSS for the dashboard and the call page
 client/widget, host, call  browser bundles (esbuild → src/generated, never edited by hand).
@@ -36,7 +36,7 @@ npm run db:migrate && npm run db:seed   # local D1 + two example sites + dev@exa
 npm run dev                             # Worker on :8787          npm run demo   # a customer page on :8788
 npm run check                           # build + typecheck (worker AND browser) + unit tests — must pass before any commit
 npm run smoke / smoke:sites / smoke:call   # end-to-end, against a RUNNING localhost Worker
-npm run deploy -- --config wrangler.<name>.local.jsonc
+npm run deploy -- --config wrangler.<name>.local.jsonc   # migrations + deploy + missing secrets; the deploy button runs `npm run deploy`
 ```
 
 ## Rules that are easy to break
@@ -49,10 +49,18 @@ npm run deploy -- --config wrangler.<name>.local.jsonc
   or `visitorId` is checked against what the socket's attachment says, as
   `CALL_END` and `CALL_MEDIA_*` in `src/durable/commands.ts` do (tested in
   `test/commands.test.ts`).
-- **`wrangler.jsonc` is a template.** Real account ids, D1/KV ids and
-  hostnames live only in a gitignored `wrangler.*.local.jsonc`. Never commit
-  them, and never put a secret in `vars`. `scripts/deploy.mjs` refuses
-  placeholders for this reason.
+- **`wrangler.jsonc` is a template, and it must stay deployable untouched.**
+  The "Deploy to Cloudflare" button reads it: placeholder ids get replaced,
+  `workers_dev` stays true, and nothing in it may assume a hostname.
+  `PUBLIC_BASE_URL` is optional — read it through `publicBaseUrl()` in
+  `src/lib/base-url.ts`, never from the env directly. Real ids for a
+  deployment of your own live only in a gitignored `wrangler.*.local.jsonc`;
+  never commit them, and never put a secret in `vars`. `scripts/deploy.mjs`
+  refuses placeholders for this reason.
+- **A fresh deployment must work with no terminal.** Migrations, the session
+  secret and the account id are handled by `scripts/deploy.mjs`; the first
+  admin is created at `/setup` (password mode) or by the first Access sign-in.
+  Anything new a deployment needs has to fit one of those, not a README step.
 - **No personal data in tracked files.** Sites, domains, emails and names in
   seeds, tests, docs and comments are `example.com`-style. Run
   `git grep -i` for anything real before opening a PR.

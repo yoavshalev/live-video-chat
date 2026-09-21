@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npm run build:client && wrangler dev",
     "demo": "node scripts/demo-server.mjs",
+    "build": "npm run build:client",
     "build:client": "node scripts/build-client.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.client.json",
     "test": "vitest run",
@@ -34,6 +35,46 @@
   },
   "description": "Embeddable \"talk to a person right now\" widget: live presence, one shared queue, private 1:1 browser video calls. Cloudflare Workers + Durable Objects + RealtimeKit.",
   "license": "MIT",
+  "cloudflare": {
+    "label": "Live Video Chat",
+    "products": [
+      "Workers",
+      "Durable Objects",
+      "D1",
+      "KV",
+      "R2",
+      "RealtimeKit"
+    ],
+    "categories": [
+      "starter"
+    ],
+    "docs_url": "https://github.com/yoavshalev/live-video-chat#readme",
+    "preview_image_url": "https://raw.githubusercontent.com/yoavshalev/live-video-chat/main/docs/screenshots/widget-live.png",
+    "publish": false,
+    "bindings": {
+      "DB": {
+        "description": "Call history, agents, sites and the inbox (D1). Created for you; the schema is applied on deploy."
+      },
+      "RATE": {
+        "description": "Rate-limit counters (KV). Created for you."
+      },
+      "MEDIA": {
+        "description": "Your intro clip (R2). Created for you."
+      },
+      "LIVE_HOST_ROOM": {
+        "description": "The one Durable Object that runs presence, the queue and the calls."
+      },
+      "REALTIMEKIT_APP_ID": {
+        "description": "Cloudflare dashboard → Realtime → RealtimeKit → Create App (in the dashboard, not the API) → copy the App ID. Calls cannot start without it; everything else works, and you can add it later with `wrangler secret put`."
+      },
+      "REALTIMEKIT_API_TOKEN": {
+        "description": "dash.cloudflare.com/profile/api-tokens → Create Token with the \"Realtime → RealtimeKit Admin\" permission."
+      },
+      "CLOUDFLARE_ACCOUNT_ID": {
+        "description": "Your account id, from the dashboard's overview page. The deploy fills it in itself when it can."
+      }
+    }
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/yoavshalev/live-video-chat"

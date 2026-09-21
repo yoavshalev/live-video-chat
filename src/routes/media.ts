@@ -7,6 +7,7 @@
  * browser actually plays a video — are handled correctly and cached.
  */
 
+import { publicBaseUrl } from '../lib/base-url'
 import { Hono } from 'hono'
 import type { AppEnv } from '../types'
 import { requireAgent } from '../lib/auth'
@@ -106,7 +107,7 @@ export function register(app: Hono<AppEnv>): void {
       httpMetadata: { contentType, cacheControl: CACHE_CONTROL }
     })
 
-    const url = `${c.env.PUBLIC_BASE_URL}/media/${key}`
+    const url = `${publicBaseUrl(c.env, c.req.raw)}/media/${key}`
     await updateHostProfile(c.env, c.env.ORG_ID, {
       ...(kind === 'loop' ? { loopVideoUrl: url } : {}),
       ...(kind === 'poster' ? { loopPosterUrl: url } : {}),

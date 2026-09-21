@@ -5,26 +5,28 @@
 	"compatibility_date": "2026-09-01",
 	"observability": { "enabled": true },
 
-	// ── Your hostname ──────────────────────────────────────────────────────────
-	// A subdomain of a zone on your Cloudflare account. custom_domain provisions
-	// the DNS record and the certificate on first deploy. Must match
-	// PUBLIC_BASE_URL below.
+	// ── Where it runs ──────────────────────────────────────────────────────────
+	// As shipped, on your account's *.workers.dev subdomain, which is what the
+	// "Deploy to Cloudflare" button and a plain `npm run deploy` give you. Nothing
+	// else needs to know the hostname: the Worker reads it from each request.
 	//
-	// If you use Cloudflare Access for sign-in (HOST_AUTH_MODE "access"), its
-	// policy must NOT cover /widget.js, /embed/*, /ws/widget, /media/*, /call or
-	// /api/*, which embedding sites and visitors call unauthenticated. Scope the
-	// policy to /host* and /ws/host.
-	"routes": [{ "pattern": "live.example.com", "custom_domain": true }],
-
-	// The *.workers.dev hostname is an unauthenticated route that bypasses any
-	// Cloudflare Access policy bound to the real hostname — and /host is behind
-	// exactly such a policy in production. The custom domain is the only way in.
-	"workers_dev": false,
+	// To put it on your own domain, add a route (a subdomain of a zone on your
+	// account; custom_domain provisions the DNS record and certificate on first
+	// deploy) and optionally set vars.PUBLIC_BASE_URL below:
+	//   "routes": [{ "pattern": "live.example.com", "custom_domain": true }],
+	//
+	// If you use Cloudflare Access for sign-in (HOST_AUTH_MODE "access"), set
+	// workers_dev to false and use a custom domain: the workers.dev hostname is an
+	// unauthenticated route that bypasses any Access policy on the real one. And
+	// scope the policy to /host* and /ws/host — it must NOT cover /widget.js,
+	// /embed/*, /ws/widget, /media/*, /call or /api/*, which embedding sites and
+	// visitors call unauthenticated.
+	"workers_dev": true,
 
 	// ── Durable Object: the one authoritative coordinator ──────────────────────
 	// A single instance (idFromName(ORG_ID)) owns presence, every agent, the
-	// queue, invitations and the active calls. Everything that mutates that state is serialized through
-	// it, which is what makes the race conditions in README "Race conditions" safe.
+	// queue, invitations and the active calls. Everything that mutates that state
+	// is serialized through it, which is what makes the races in README "Races" safe.
 	//
 	// SQLite-backed (new_sqlite_classes) because hibernating WebSockets require it
 	// and because storage reads are synchronous-ish and cheap.
@@ -35,9 +37,10 @@
 
 	// ── D1: history and business records ──────────────────────────────────────
 	// The DO owns *live* state. D1 owns what happened: calls, queue sessions,
-	// offline messages, analytics. Never read D1 to answer "who is next" — that is
-	// the DO's job, and D1 lags it by design.
-	// Create with:  npx wrangler d1 create founderlive   → paste database_id below.
+	// offline messages, analytics, agents, sites. Never read D1 to answer "who is
+	// next" — that is the DO's job, and D1 lags it by design.
+	// The deploy button creates the database and fills the id in. By hand:
+	//   npx wrangler d1 create founderlive   → paste database_id below.
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -46,36 +49,39 @@
 		}
 	],
 
-	// ── KV: rate-limit counters and the site-config read cache ────────────────
+	// ── KV: rate-limit counters ───────────────────────────────────────────────
 	// Deliberately the only KV use. Fixed-window counters want a globally
 	// replicated store with native TTL and tolerate eventual consistency; the
 	// strongly-consistent limits (queue joins) are enforced in the DO instead.
-	// Create with:  npx wrangler kv namespace create RATE
+	// By hand:  npx wrangler kv namespace create RATE   → paste id below.
 	"kv_namespaces": [{ "binding": "RATE", "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }],
 
 	// ── R2: the looping intro clip and its poster ─────────────────────────────
 	// Served through /media/* so the widget only ever talks to one origin (one
 	// entry in an embedding site's CSP) and we control cache headers.
-	// Create with:  npx wrangler r2 bucket create founderlive-media
+	// By hand:  npx wrangler r2 bucket create founderlive-media
 	"r2_buckets": [{ "binding": "MEDIA", "bucket_name": "founderlive-media" }],
 
 	// Lets `import widgetJs from './generated/widget.js'` pull the esbuild output in
 	// as a string, so the Worker serves client bundles with headers it chooses
 	// rather than handing caching policy to a static-asset layer.
-	// Run `npm run build:client` before dev/deploy — `npm run dev` does it for you.
+	// Run `npm run build` before dev/deploy — `npm run dev` and `npm run deploy` do.
 	"rules": [{ "type": "Text", "globs": ["**/generated/*.js"], "fallthrough": true }],
 
 	"vars": {
 		// One deployment is one organization. This names the Durable Object and
 		// the hosts row that holds the intro clip. Agents — the people who take
-		// calls — are rows in the agents table; add them with
-		// `node scripts/agent.mjs add` or on the dashboard's Agents tab.
+		// calls — are rows in the agents table; the first one is created at /setup
+		// after deploying, the rest on the dashboard's Agents tab.
 		"ORG_ID": "default",
-		// Absolute origin the widget connects back to. MUST be correct: it is baked
-		// into the WebSocket URL, the call iframe src, and the embed snippet shown
-		// on the dashboard. Local dev overrides it from .dev.vars.
-		"PUBLIC_BASE_URL": "https://live.example.com",
-		// "password" | "access" — see .dev.vars.example and README "Authentication".
+		// Optional. The absolute origin the widget connects back to, baked into the
+		// WebSocket URL, the call iframe and the embed snippet. Unset, it is the
+		// origin each request arrived on, which is right for one hostname. Set it
+		// when the Worker answers on several (workers.dev and a custom domain) and
+		// you want every snippet to use one of them:
+		//   "PUBLIC_BASE_URL": "https://live.example.com",
+		//
+		// "password" | "access" — see README "Authentication".
 		"HOST_AUTH_MODE": "password",
 		// Presets created automatically when you create the RealtimeKit app in the
 		// dashboard.
@@ -92,12 +98,13 @@
 	}
 
 	// SECRETS (npx wrangler secret put <NAME>) — never vars, or the var wins on deploy:
-	//   CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN, SESSION_SECRET,
-	//   CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, ALLOWED_HOST_EMAIL  (access mode only)
+	//   REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN   you, from the Cloudflare dashboard
+	//   CLOUDFLARE_ACCOUNT_ID, SESSION_SECRET       `npm run deploy` sets these if missing
+	//   CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, ALLOWED_HOST_EMAIL   access mode only
 	//
-	// THIS FILE IS A TEMPLATE. Keep the real ids of a deployment in a copy named
-	// wrangler.<name>.local.jsonc (gitignored) and pass it to every remote command:
+	// Deploying by hand rather than with the button? Keep the real ids of your
+	// deployment in a copy named wrangler.<name>.local.jsonc (gitignored) and pass
+	// it to every remote command:
 	//   npm run deploy -- --config wrangler.<name>.local.jsonc
-	//   npx wrangler d1 migrations apply founderlive --remote --config wrangler.<name>.local.jsonc
 	//   npx wrangler secret put NAME --config wrangler.<name>.local.jsonc
 }

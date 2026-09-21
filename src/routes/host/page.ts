@@ -24,7 +24,7 @@ import { HOST_STYLES } from '../../ui/styles'
 import { requireAgent } from '../../lib/auth'
 import { listSites } from '../../lib/sites'
 import { getHostProfile, getTodayMetrics, listAgents, recentSessions, startOfTodayUtc, summarize } from '../../lib/db'
-import { layout } from './layout'
+import { layout, type Html } from './layout'
 import { header } from './tabs/header'
 import { liveTab } from './tabs/live'
 import { embedTab } from './tabs/embed'
@@ -32,6 +32,8 @@ import { inboxTab } from './tabs/inbox'
 import { clipTab } from './tabs/clip'
 import { agentsTab } from './tabs/agents'
 import { mediaModal } from './tabs/media-modal'
+import { publicBaseUrl } from '../../lib/base-url'
+import { realtimeCredentials } from '../../lib/realtimekit'
 
 export function registerDashboard(app: Hono<AppEnv>): void {
   app.get('/host', requireAgent(), async (c) => {
@@ -45,7 +47,7 @@ export function registerDashboard(app: Hono<AppEnv>): void {
       listAgents(c.env)
     ])
     const orgName = profile?.displayName ?? c.env.ORG_ID
-    const base = c.env.PUBLIC_BASE_URL
+    const base = publicBaseUrl(c.env, c.req.raw)
     const authMode = c.env.HOST_AUTH_MODE
     const isAdmin = me.role === 'admin'
 
@@ -68,6 +70,7 @@ export function registerDashboard(app: Hono<AppEnv>): void {
         html`
           <div class="shell">
             ${header(orgName, me, authMode)}
+            ${realtimeCredentials(c.env) ? '' : credentialsBanner()}
             ${liveTab(metrics, recent)}
             ${embedTab()}
             ${inboxTab()}
@@ -83,4 +86,17 @@ export function registerDashboard(app: Hono<AppEnv>): void {
       )
     )
   })
+}
+
+/**
+ * A fresh deployment works up to the moment a call is accepted. Rather than
+ * fail there, in front of a visitor, say so here, in front of the admin.
+ */
+function credentialsBanner(): Html {
+  return html`<div class="banner" role="status">
+    <strong>Calls cannot start yet.</strong> This deployment has no RealtimeKit credentials. Add the
+    three secrets — <span class="mono">REALTIMEKIT_APP_ID</span>, <span class="mono">REALTIMEKIT_API_TOKEN</span>,
+    <span class="mono">CLOUDFLARE_ACCOUNT_ID</span> — as the README's “RealtimeKit” section describes, then
+    reload. Everything else on this page works.
+  </div>`
 }

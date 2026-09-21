@@ -10,15 +10,18 @@ import type { Hono } from 'hono'
 import { html } from 'hono/html'
 import type { AppEnv } from '../../types'
 import { authenticatePassword, clearAgentSession, createAgentSession, requireAgent } from '../../lib/auth'
+import { countAgents } from '../../lib/db'
 import { consume } from '../../lib/ratelimit'
 import { clientIp, hashIp } from '../../lib/security'
 import hostAppSource from '../../generated/host.js'
 import { layout } from './layout'
 
 export function registerLogin(app: Hono<AppEnv>): void {
-  app.get('/host/login', (c) => {
+  app.get('/host/login', async (c) => {
     if (c.env.HOST_AUTH_MODE === 'access') return c.redirect('/host')
     if (c.get('agent')) return c.redirect('/host')
+    // A deployment with no agents has nobody who could sign in yet.
+    if ((await countAgents(c.env)) === 0) return c.redirect('/setup')
     const next = c.req.query('next') ?? '/host'
     const error = c.req.query('error')
 
@@ -69,7 +72,7 @@ export function registerLogin(app: Hono<AppEnv>): void {
     const email = String(form.get('email') ?? '')
     const password = String(form.get('password') ?? '')
     const next = String(form.get('next') ?? '/host')
-    const agent = await authenticatePassword(c.env, email, password)
+    const agent = await authenticatePassword(c.env, email, password, c.req.raw)
     if (!agent) return c.redirect('/host/login?error=1')
 
     await createAgentSession(c, agent)
