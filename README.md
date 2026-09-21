@@ -390,6 +390,14 @@ stage and the camera becomes a tile. **Remote audio is played by this code, not
 the SDK** — the core RealtimeKit SDK hands over a raw track and plays nothing —
 with a "Tap to hear" fallback where autoplay is blocked.
 
+**"I can't hear you"** is fixed on whichever side has the wrong device, so both
+sides get the same tools: a microphone meter on the preview screen before
+joining, and in the call a settings button with microphone, camera and (in
+Chrome, Edge and Firefox) speaker pickers, a meter of your own microphone, a
+meter of what is arriving from the other person, and a "muted" label when they
+have muted themselves. If their meter moves and you hear nothing, it is your
+output; if it stays flat, it is their input.
+
 A meeting is created only when a call is accepted, never for people in the
 queue, and exactly two participant tokens are minted, by the Durable Object.
 No recording, no transcription, no third party in the room. `calls` records
