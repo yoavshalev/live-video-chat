@@ -1,5 +1,7 @@
 # Live Video Chat
 
+[![Sponsored on SponsoredBy.io](https://sponsoredby.io/embed/yoavshalev.svg?corners=rounded&size=small&theme=dark&color=green&logo=1)](https://sponsoredby.io/yoavshalev)
+
 A "talk to a real person right now" button for your websites.
 
 One script tag on any number of sites. One dashboard for your team. One shared
