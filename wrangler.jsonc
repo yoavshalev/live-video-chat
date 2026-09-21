@@ -1,0 +1,103 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "founderlive",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	"observability": { "enabled": true },
+
+	// ── Your hostname ──────────────────────────────────────────────────────────
+	// A subdomain of a zone on your Cloudflare account. custom_domain provisions
+	// the DNS record and the certificate on first deploy. Must match
+	// PUBLIC_BASE_URL below.
+	//
+	// If you use Cloudflare Access for sign-in (HOST_AUTH_MODE "access"), its
+	// policy must NOT cover /widget.js, /embed/*, /ws/widget, /media/*, /call or
+	// /api/*, which embedding sites and visitors call unauthenticated. Scope the
+	// policy to /host* and /ws/host.
+	"routes": [{ "pattern": "live.example.com", "custom_domain": true }],
+
+	// The *.workers.dev hostname is an unauthenticated route that bypasses any
+	// Cloudflare Access policy bound to the real hostname — and /host is behind
+	// exactly such a policy in production. The custom domain is the only way in.
+	"workers_dev": false,
+
+	// ── Durable Object: the one authoritative coordinator ──────────────────────
+	// A single instance (idFromName(ORG_ID)) owns presence, every agent, the
+	// queue, invitations and the active calls. Everything that mutates that state is serialized through
+	// it, which is what makes the race conditions in README "Race conditions" safe.
+	//
+	// SQLite-backed (new_sqlite_classes) because hibernating WebSockets require it
+	// and because storage reads are synchronous-ish and cheap.
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveHostRoom"] }],
+	"durable_objects": {
+		"bindings": [{ "name": "LIVE_HOST_ROOM", "class_name": "LiveHostRoom" }]
+	},
+
+	// ── D1: history and business records ──────────────────────────────────────
+	// The DO owns *live* state. D1 owns what happened: calls, queue sessions,
+	// offline messages, analytics. Never read D1 to answer "who is next" — that is
+	// the DO's job, and D1 lags it by design.
+	// Create with:  npx wrangler d1 create founderlive   → paste database_id below.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "founderlive",
+			"database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+		}
+	],
+
+	// ── KV: rate-limit counters and the site-config read cache ────────────────
+	// Deliberately the only KV use. Fixed-window counters want a globally
+	// replicated store with native TTL and tolerate eventual consistency; the
+	// strongly-consistent limits (queue joins) are enforced in the DO instead.
+	// Create with:  npx wrangler kv namespace create RATE
+	"kv_namespaces": [{ "binding": "RATE", "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }],
+
+	// ── R2: the looping intro clip and its poster ─────────────────────────────
+	// Served through /media/* so the widget only ever talks to one origin (one
+	// entry in an embedding site's CSP) and we control cache headers.
+	// Create with:  npx wrangler r2 bucket create founderlive-media
+	"r2_buckets": [{ "binding": "MEDIA", "bucket_name": "founderlive-media" }],
+
+	// Lets `import widgetJs from './generated/widget.js'` pull the esbuild output in
+	// as a string, so the Worker serves client bundles with headers it chooses
+	// rather than handing caching policy to a static-asset layer.
+	// Run `npm run build:client` before dev/deploy — `npm run dev` does it for you.
+	"rules": [{ "type": "Text", "globs": ["**/generated/*.js"], "fallthrough": true }],
+
+	"vars": {
+		// One deployment is one organization. This names the Durable Object and
+		// the hosts row that holds the intro clip. Agents — the people who take
+		// calls — are rows in the agents table; add them with
+		// `node scripts/agent.mjs add` or on the dashboard's Agents tab.
+		"ORG_ID": "default",
+		// Absolute origin the widget connects back to. MUST be correct: it is baked
+		// into the WebSocket URL, the call iframe src, and the embed snippet shown
+		// on the dashboard. Local dev overrides it from .dev.vars.
+		"PUBLIC_BASE_URL": "https://live.example.com",
+		// "password" | "access" — see .dev.vars.example and README "Authentication".
+		"HOST_AUTH_MODE": "password",
+		// Presets created automatically when you create the RealtimeKit app in the
+		// dashboard.
+		//
+		// UNDERSCORES, not hyphens. Cloudflare's own docs write the examples as
+		// `group-call-host`, but the presets an app is actually created with are
+		// named `group_call_host` / `group_call_participant` (the pre-acquisition
+		// Dyte convention). Getting this wrong fails only at the moment a real call
+		// is accepted, which is the worst possible time to find out — so if you ever
+		// change apps, check GET /api/host/realtimekit first, which lists the names
+		// this app really has and flags a mismatch.
+		"REALTIMEKIT_HOST_PRESET": "group_call_host",
+		"REALTIMEKIT_VISITOR_PRESET": "group_call_participant"
+	}
+
+	// SECRETS (npx wrangler secret put <NAME>) — never vars, or the var wins on deploy:
+	//   CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN, SESSION_SECRET,
+	//   CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, ALLOWED_HOST_EMAIL  (access mode only)
+	//
+	// THIS FILE IS A TEMPLATE. Keep the real ids of a deployment in a copy named
+	// wrangler.<name>.local.jsonc (gitignored) and pass it to every remote command:
+	//   npm run deploy -- --config wrangler.<name>.local.jsonc
+	//   npx wrangler d1 migrations apply founderlive --remote --config wrangler.<name>.local.jsonc
+	//   npx wrangler secret put NAME --config wrangler.<name>.local.jsonc
+}

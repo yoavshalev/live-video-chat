@@ -1,0 +1,42 @@
+{
+  "name": "live-video-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:client && wrangler dev",
+    "demo": "node scripts/demo-server.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.client.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:sites": "node scripts/smoke-sites.mjs",
+    "smoke:call": "node scripts/smoke-call.mjs",
+    "check": "npm run build:client && npm run typecheck && npm run test",
+    "predeploy": "npm run check",
+    "deploy": "wrangler deploy",
+    "agent": "node scripts/agent.mjs",
+    "db:migrate": "wrangler d1 migrations apply founderlive --local",
+    "db:migrate:remote": "wrangler d1 migrations apply founderlive --remote",
+    "db:seed": "wrangler d1 execute founderlive --local --file ./seed/sites.sql && wrangler d1 execute founderlive --local --file ./seed/dev-agent.sql",
+    "db:seed:remote": "wrangler d1 execute founderlive --remote --file ./seed/sites.sql"
+  },
+  "dependencies": {
+    "hono": "^4.13.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260917.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.34.0",
+    "ws": "^8.21.3"
+  },
+  "description": "Embeddable \"talk to a person right now\" widget: live presence, one shared queue, private 1:1 browser video calls. Cloudflare Workers + Durable Objects + RealtimeKit.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yoavshalev/live-video-chat"
+  }
+}

@@ -1,0 +1,6 @@
+# Normalize line endings in the repository; editors on Windows check out LF too.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.webm binary

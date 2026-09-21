@@ -1,0 +1,16 @@
+node_modules/
+.wrangler/
+dist/
+
+# Local secrets and per-deployment configuration. wrangler.jsonc in the repo is
+# a template with placeholder ids; a real deployment keeps its account id, D1 id,
+# KV id and hostname in a copy named wrangler.<anything>.local.jsonc and deploys
+# with `npm run deploy -- --config wrangler.<anything>.local.jsonc`.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+wrangler.*.local.jsonc
+
+# Client bundles are produced by `npm run build:client` from client/*/index.ts.
+# They are build output, not source — never edit them, never commit them.
+src/generated/

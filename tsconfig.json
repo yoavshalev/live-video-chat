@@ -1,0 +1,23 @@
+{
+  // The Worker. Deliberately WITHOUT the DOM lib: Workers globals and DOM
+  // globals define incompatible versions of the same names (Response, FormData,
+  // WebSocket), and having both in scope silently resolves to whichever won.
+  // Browser code type-checks under tsconfig.client.json instead.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "types": ["@cloudflare/workers-types"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "baseUrl": "."
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["src/generated/**"]
+}

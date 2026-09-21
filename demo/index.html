@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PingBell — FounderLive demo host page</title>
+    <!--
+      A stand-in for a real embedding site, served from a DIFFERENT origin than
+      the Worker (http://localhost:8788 vs http://localhost:8787). That difference
+      is the point: it exercises the origin allow-list, the cross-origin socket,
+      the cross-origin config fetch and the cross-origin call iframe — none of
+      which are tested by loading the widget from the Worker's own domain.
+
+      The styles below are deliberately aggressive and deliberately ugly. They
+      exist to prove the widget's shadow root actually isolates it: a host page
+      that sets `* { border-radius: 0 }` and a giant serif font must not change
+      how the widget looks.
+    -->
+    <style>
+      * { border-radius: 0 !important; box-sizing: content-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 19px;
+        line-height: 2.1;
+        color: #2b2b2b;
+        background: #faf7f2;
+      }
+      button, input { font-family: inherit; font-size: 22px; border: 3px dashed hotpink; }
+      .page { max-width: 680px; margin: 0 auto; padding: 64px 24px 160px; }
+      h1 { font-size: 44px; line-height: 1.15; margin: 0 0 16px; }
+      p { margin: 0 0 20px; }
+      .note { background: #fff4d6; border-left: 5px solid #e0a800; padding: 14px 18px; font-size: 16px; line-height: 1.6; }
+      code { background: #eee9e0; padding: 2px 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85em; }
+      .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>PingBell</h1>
+      <p>
+        A pretend customer site. Everything on this page is here to be hostile to
+        the widget: a serif body font, <code>border-radius: 0 !important</code> on
+        every element, and dashed pink borders on all buttons.
+      </p>
+      <p class="note">
+        If the widget in the corner still looks like itself — rounded, sans-serif,
+        no pink — shadow-root isolation is working. If it has gone square and
+        serif, it is not.
+      </p>
+      <p>
+        Talking to <code id="target">…</code>. Add <code>?base=https://your-worker.example</code> to point
+        this page at the deployed Worker instead, and <code>?site=example-two</code> to
+        pretend to be a different site.
+      </p>
+      <p>
+        Open the matching dashboard at <code>/host</code>, click
+        <strong>Go live</strong>, and watch this page change without a reload.
+      </p>
+
+      <div class="controls">
+        <button type="button" onclick="FounderLive.open()">Open the widget from my own button</button>
+        <button type="button" onclick="FounderLive.close()">Close it</button>
+        <button type="button" onclick="alert(JSON.stringify(FounderLive.getStatus(), null, 2))">
+          Read its status
+        </button>
+      </div>
+
+      <p style="margin-top:40px">
+        Events fired on <code>window</code> appear below, which is how a host
+        application would hook the widget into its own analytics.
+      </p>
+      <pre id="log" style="background:#eee9e0;padding:14px;font-size:14px;line-height:1.5;overflow:auto"></pre>
+    </div>
+
+    <script>
+      // ?open=1 expands the widget without a click, which is how the panel gets
+      // screenshotted in headless browsers during development.
+      if (new URLSearchParams(location.search).has('open')) {
+        window.addEventListener('founderlive:ready', () => window.FounderLive?.open())
+        setTimeout(() => window.FounderLive?.open(), 900)
+      }
+
+      const log = document.getElementById('log')
+      for (const name of [
+        'opened', 'closed', 'talkclicked', 'queuejoined', 'queueleft',
+        'invited', 'inviteexpired', 'callstarted', 'callended', 'offlinemessagesent'
+      ]) {
+        window.addEventListener(`founderlive:${name}`, (event) => {
+          log.textContent += `${new Date().toLocaleTimeString()}  founderlive:${name}  ${JSON.stringify(event.detail)}\n`
+        })
+      }
+    </script>
+
+    <!--
+      The whole integration. One tag.
+
+      ?base=https://live.example.com points it at a deployed Worker instead of
+      the local one, which is how you test a real end-to-end call before the
+      widget is embedded on any actual site — provided that site's allow-list
+      includes localhost. ?site=<id> picks the site (default: the seeded
+      "example").
+    -->
+    <script>
+      (() => {
+        const params = new URLSearchParams(location.search)
+        const base = (params.get('base') ?? 'http://localhost:8787').replace(/\/+$/, '')
+        const tag = document.createElement('script')
+        tag.src = `${base}/widget.js`
+        tag.dataset.site = params.get('site') ?? 'example'
+        tag.dataset.position = 'bottom-right'
+        tag.defer = true
+        document.body.append(tag)
+        document.getElementById('target').textContent = base
+      })()
+    </script>
+  </body>
+</html>

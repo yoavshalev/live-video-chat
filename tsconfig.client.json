@@ -1,0 +1,18 @@
+{
+  // The three browser bundles. DOM lib, no Workers types — the mirror image of
+  // tsconfig.json. Both configs compile src/shared/* and src/config.ts, which is
+  // intentional: those modules are shared across the wire and must be valid in
+  // both worlds.
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["client/**/*", "src/shared/protocol.ts", "src/config.ts"]
+}
