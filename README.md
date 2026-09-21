@@ -549,9 +549,10 @@ client/
 
 migrations/   D1 schema, applied in order
 seed/         example sites (any environment) and the dev admin (local only)
-scripts/      agent CLI, client build, demo server, smoke suites
+scripts/      agent CLI, client build, deploy preflight, demo server, smoke suites
 test/         vitest
 demo/         a pretend customer page for local development
+AGENTS.md     the rules of the road for AI coding agents (Codex, Claude Code, Cursor…)
 ```
 
 `client/` imports types straight out of `src/shared/`: the protocol is defined
