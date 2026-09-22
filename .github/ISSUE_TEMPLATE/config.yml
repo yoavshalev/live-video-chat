@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, setup help, and show & tell
+    url: https://github.com/yoavshalev/live-video-chat/discussions
+    about: Ask how to deploy or embed it, or share what you built with it.
+  - name: Report a security vulnerability
+    url: https://github.com/yoavshalev/live-video-chat/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
