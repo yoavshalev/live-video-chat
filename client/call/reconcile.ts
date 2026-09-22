@@ -8,7 +8,7 @@
  */
 
 import { els } from './dom'
-import { call } from './state'
+import { call, isIOS } from './state'
 import { micMeter } from './meters'
 import { recoverMicrophone, selfTrackMuted, syncSelfControls } from './microphone'
 import { syncPeerAudio } from './peer'
@@ -20,13 +20,16 @@ export function reconcileAudio(): void {
   if (!meeting) return
 
   const own = meeting.self.audioTrack ?? null
-  if (meeting.self.audioEnabled && own && selfTrackMuted()) {
-    // A platform-muted track. Muted for long enough to be real, in the
-    // foreground, and not too often: fix it without asking. Otherwise the
-    // banner and its button take over.
+  // A track the platform muted, or one it ended — the SDK cannot revive an
+  // ended track on its own, enableAudio() only flips a flag on it — and that
+  // nobody muted on purpose.
+  if (own && !call.selfMuted && (own.muted || own.readyState === 'ended')) {
+    // Muted for long enough to be real, in the foreground, not too often, and
+    // never on iOS, where a capture belongs inside a tap: fix it without
+    // asking. Otherwise the banner and its button take over.
     const now = Date.now()
     call.recovery.mutedSince ??= now
-    if (!call.recovering && shouldAutoRecover(call.recovery, now, document.visibilityState === 'visible')) {
+    if (!call.recovering && !isIOS && shouldAutoRecover(call.recovery, now, document.visibilityState === 'visible')) {
       call.recovery = recordAutomatic(call.recovery, now)
       void recoverMicrophone('auto')
       return

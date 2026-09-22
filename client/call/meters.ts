@@ -1,17 +1,18 @@
 /**
  * Level meters: a bar that moves when sound is on a track.
  *
- * Reads the waveform through an AnalyserNode on a CLONE of the track: the SDK's
- * own track is never touched by anything but the SDK. That matters on iOS,
- * where a captured track goes silent the moment a second consumer takes hold of
- * the capture, and where "silent" looks, to the other side, exactly like
- * "muted".
+ * Reads the waveform through an AnalyserNode fed by the SDK's own track. The
+ * track is only ever *read* here: never cloned, never stopped, never touched
+ * in a way the SDK could notice. On iOS, stopping a clone of a capture track
+ * has been seen to end the original as well, which takes the microphone away
+ * from the call while the SDK still believes it has one.
  *
- * One AudioContext for the page: browsers start it suspended until the person
- * has clicked something in THIS frame, so it is resumed on the first gesture
- * (the Join click, at the latest). Until then the meters cannot hear anything,
- * and every reading is qualified by `metersLive()` so a bar that says "silent"
- * never blames a microphone that is fine.
+ * One AudioContext for the page, created when the first meter attaches and
+ * resumed on the first gesture (the Join click, at the latest): browsers start
+ * it suspended until the person has clicked something in THIS frame. Until
+ * then the meters cannot hear anything, and every reading is qualified by
+ * `metersLive()` so a bar that says "silent" never blames a microphone that is
+ * fine.
  */
 
 import { els } from './dom'
@@ -22,15 +23,6 @@ let onStateChange: () => void = () => {}
 /** Called whenever the context starts or stops running; index.ts wires the UI to it. */
 export function whenMetersChange(handler: () => void): void {
   onStateChange = handler
-}
-
-/**
- * Creates the context ahead of the first capture. On iOS an AudioContext that
- * starts after getUserMedia has been seen to mute the microphone track; one
- * that exists first is simply resumed later, on the first tap.
- */
-export function prepareMeters(): void {
-  context()
 }
 
 function context(): AudioContext | null {
@@ -61,7 +53,6 @@ export function syncMeterLabels(): void {
 
 export class LevelMeter {
   private track: MediaStreamTrack | null = null
-  private clone: MediaStreamTrack | null = null
   private source: MediaStreamAudioSourceNode | null = null
   private analyser: AnalyserNode | null = null
   private frame = 0
@@ -78,8 +69,7 @@ export class LevelMeter {
     const ctx = context()
     if (!ctx) return
     try {
-      this.clone = track.clone()
-      this.source = ctx.createMediaStreamSource(new MediaStream([this.clone]))
+      this.source = ctx.createMediaStreamSource(new MediaStream([track]))
       this.analyser = ctx.createAnalyser()
       this.analyser.fftSize = 512
       this.source.connect(this.analyser)
@@ -105,16 +95,13 @@ export class LevelMeter {
     this.frame = requestAnimationFrame(tick)
   }
 
+  /** Stops listening. The track itself is left exactly as it was. */
   detach(): void {
     cancelAnimationFrame(this.frame)
     this.source?.disconnect()
     this.analyser?.disconnect()
-    // The clone holds the capture open on its own; stopping it is what lets
-    // the browser's "microphone in use" indicator go out.
-    this.clone?.stop()
     this.source = null
     this.analyser = null
-    this.clone = null
     this.track = null
     this.level = 0
     for (const bar of this.bars) bar.style.width = '0%'

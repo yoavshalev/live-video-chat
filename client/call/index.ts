@@ -17,7 +17,7 @@
  *   microphone.ts  our own mic and camera, and recovering a muted one
  *   devices.ts     pickers, remembered defaults, the output device
  *   peer.ts        the other person's video, audio and screen
- *   meters.ts      level meters on cloned tracks
+ *   meters.ts      level meters, reading the SDK's own tracks
  *   status.ts      the audio status line
  *   reconcile.ts   the once-a-second "make playback match the SDK"
  *   screens.ts     the overlay and its errors
@@ -27,7 +27,7 @@
 import { els } from './dom'
 import { call } from './state'
 import { notifyParent } from './parent'
-import { prepareMeters, resumeAudio, syncMeterLabels, whenMetersChange } from './meters'
+import { resumeAudio, syncMeterLabels, whenMetersChange } from './meters'
 import { renderAudioStatus } from './status'
 import { recoverMicrophone, selfTrackMuted, turnMicOn } from './microphone'
 import { wireDevices } from './devices'
@@ -56,7 +56,6 @@ window.addEventListener('pagehide', () => {
   if (call.reported && !call.finishing) notifyParent('media-left')
 })
 
-prepareMeters()
 void setup()
 
 export {}

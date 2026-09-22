@@ -18,7 +18,7 @@
 
 import { describe } from './boot'
 import { els } from './dom'
-import { call } from './state'
+import { call, isIOS } from './state'
 import { micMeter } from './meters'
 import { renderAudioStatus } from './status'
 import { note, sendDiagnostics } from './diagnostics'
@@ -104,7 +104,7 @@ export function syncSelfControls(): void {
         ? 'Your phone keeps muting the microphone. Bring this app to the front, end any other call that is using the microphone, then try again — or reload the page.'
         : 'Your phone muted the microphone — the other side cannot hear you.'
       : call.lastMediaError
-        ? `Your microphone is off (${call.lastMediaError}).`
+        ? `Your microphone is off. ${call.lastMediaError}`
         : 'Your microphone is off — the other side cannot hear you.'
     els.micOffFix.textContent = trackMuted ? (call.stuckMuted ? 'Try again' : 'Fix microphone') : 'Turn it on'
   }
@@ -144,6 +144,11 @@ export async function recoverMicrophone(trigger: 'auto' | 'tap'): Promise<void> 
   call.recovery.mutedSince = after && (after.muted || after.readyState === 'ended') ? Date.now() : null
   micMeter.attach(meeting.self.audioEnabled ? after : null)
   syncSelfControls()
+  if (!meeting.self.audioEnabled) {
+    note('recover:no-track', { trigger, error: call.lastMediaError })
+    void sendDiagnostics('capture-failed')
+    return
+  }
 
   // Judged once iOS has had a moment: a fresh track can report muted for a
   // few hundred milliseconds before it starts. One still muted after that is
@@ -164,9 +169,10 @@ export async function recoverMicrophone(trigger: 'auto' | 'tap'): Promise<void> 
  */
 async function reacquire(meeting: RtkMeeting, before: MediaStreamTrack | null): Promise<boolean> {
   const current = meeting.self.getCurrentDevices().audio ?? call.microphones[0]
-  if (current) {
-    // The SDK's setDevice() swallows a failed capture rather than throwing, so
-    // the outcome is checked, never assumed.
+  // On iOS the capture is ours to make, right here inside the tap, and any
+  // refusal is ours to read. The SDK's setDevice() swallows a failed capture
+  // rather than throwing, so elsewhere its outcome is checked, never assumed.
+  if (current && !isIOS) {
     await meeting.self.setDevice({ ...current, kind: 'audioinput' })
     if (freshLiveTrack(meeting.self.audioTrack, before)) return true
     note('recover:setDevice-left-no-track')
@@ -175,7 +181,12 @@ async function reacquire(meeting: RtkMeeting, before: MediaStreamTrack | null): 
   // handed-over track as custom and never stops the old one, and stopping it
   // before the SDK has let go would fire the SDK's own "ended" handler, which
   // captures yet another track behind our back.
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  let stream: MediaStream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch (error) {
+    throw new Error(explainCaptureError(error))
+  }
   const [fresh] = stream.getAudioTracks()
   if (!fresh) return false
   const old = meeting.self.audioTrack ?? null
@@ -183,6 +194,20 @@ async function reacquire(meeting: RtkMeeting, before: MediaStreamTrack | null): 
   await meeting.self.enableAudio(fresh)
   if (old && old !== fresh) old.stop()
   return freshLiveTrack(meeting.self.audioTrack, before)
+}
+
+/** What a refused getUserMedia means, in words that say what to do about it. */
+function explainCaptureError(error: unknown): string {
+  const name = (error as { name?: string } | null)?.name ?? ''
+  note('getUserMedia:error', { name, message: describe(error) })
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return isIOS
+      ? 'Safari has blocked the microphone for this site. Tap “aA” in the address bar → Website Settings → Microphone → Allow, then reload.'
+      : 'The browser has blocked the microphone for this site. Allow it in the address bar, then reload.'
+  }
+  if (name === 'NotReadableError' || name === 'AbortError') return 'Another app or tab is using the microphone. Close it, then try again.'
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No microphone was found on this device.'
+  return describe(error)
 }
 
 function freshLiveTrack(track: MediaStreamTrack | null | undefined, before: MediaStreamTrack | null): boolean {
@@ -196,18 +221,20 @@ export async function turnMicOn(): Promise<void> {
   els.micOffFix.disabled = true
   try {
     await meeting.self.enableAudio()
-    call.lastMediaError = null
   } catch (error) {
     call.lastMediaError = describe(error)
     note('enableAudio:error', describe(error))
   } finally {
     els.micOffFix.disabled = false
   }
-  if (meeting.self.audioEnabled && selfTrackMuted()) {
-    // On in the SDK's eyes, still muted by the platform: only a fresh capture helps.
+  if (!meeting.self.audioEnabled || selfTrackMuted()) {
+    // enableAudio() swallows a failed capture and cannot revive an ended
+    // track; still off, or on but muted by the platform: capture afresh, here
+    // inside the tap.
     await recoverMicrophone('tap')
     return
   }
+  call.lastMediaError = null
   micMeter.attach(meeting.self.audioTrack ?? null)
   syncSelfControls()
 }
@@ -223,15 +250,15 @@ export async function toggleMicrophone(): Promise<void> {
     } else {
       call.selfMuted = false
       await meeting.self.enableAudio()
-      call.lastMediaError = null
     }
   } catch (error) {
     call.lastMediaError = describe(error)
   }
-  if (meeting.self.audioEnabled && selfTrackMuted()) {
+  if (!call.selfMuted && (!meeting.self.audioEnabled || selfTrackMuted())) {
     await recoverMicrophone('tap')
     return
   }
+  if (meeting.self.audioEnabled) call.lastMediaError = null
   micMeter.attach(meeting.self.audioEnabled ? (meeting.self.audioTrack ?? null) : null)
   syncSelfControls()
 }

@@ -486,11 +486,15 @@ side. A phone that mutes the capture underneath the SDK (iOS does, whenever
 anything captures again, or when Safari goes to the background) is caught by
 watching the track itself. The only cure is a fresh capture — the SDK's
 enable/disable merely flip a flag on the track it already has — so the
-microphone is re-acquired through a device switch: on its own once a mute has
-lasted a moment (at most a few times a minute), and on a tap of the full-width
-"Fix microphone" banner as often as you like. If even a fresh capture comes
-back muted, the banner says what to check on the phone, and a diagnostics
-snapshot goes to the Worker's logs. The other side is told what to ask for. The controls carry labels — Mute / Unmute, Camera, Share,
+microphone is captured afresh: on a tap of the full-width "Fix microphone" /
+"Turn it on" banner as often as you like, and on desktop browsers also on its
+own once a mute has lasted a moment (at most a few times a minute). On iOS a
+capture only ever happens inside a tap, because one started on its own can put
+a permission prompt in front of somebody who did not ask for it. A refused
+capture is explained in the banner (which Safari setting to change), and if a
+fresh capture comes back muted the banner says what to check on the phone. A
+diagnostics snapshot goes to the Worker's logs either way. The other side is
+told what to ask for. The controls carry labels — Mute / Unmute, Camera, Share,
 Settings — so the button is never a guess on a phone.
 
 **Device defaults.** The camera, microphone and speaker you pick — under the

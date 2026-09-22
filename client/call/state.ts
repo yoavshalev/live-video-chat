@@ -37,5 +37,14 @@ export const call = {
   speakers: [] as MediaDeviceInfo[]
 }
 
+/**
+ * iPhone and iPad, every browser (all are WebKit there). A capture on iOS
+ * belongs inside a tap: one started on its own can put a permission prompt in
+ * front of somebody who did not ask for it, and a dismissed prompt is a
+ * denial for the rest of the page.
+ */
+export const isIOS =
+  /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
 /** Chrome, Edge and Firefox let a page pick the output device; Safari does not. */
 export const canPickSpeaker = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype
