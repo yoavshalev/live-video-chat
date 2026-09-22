@@ -46,5 +46,20 @@ export const call = {
 export const isIOS =
   /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
+/**
+ * Which app is wrapping WebKit on iOS. Chrome, Firefox and Edge there each
+ * gate the microphone behind their own app-level switch in iOS Settings and
+ * their own per-site prompt, so a refusal has to be explained per app.
+ */
+export const iosBrowser: 'Safari' | 'Chrome' | 'Firefox' | 'Edge' | null = !isIOS
+  ? null
+  : /CriOS/.test(navigator.userAgent)
+    ? 'Chrome'
+    : /FxiOS/.test(navigator.userAgent)
+      ? 'Firefox'
+      : /EdgiOS/.test(navigator.userAgent)
+        ? 'Edge'
+        : 'Safari'
+
 /** Chrome, Edge and Firefox let a page pick the output device; Safari does not. */
 export const canPickSpeaker = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype

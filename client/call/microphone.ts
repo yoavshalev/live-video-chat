@@ -18,7 +18,7 @@
 
 import { describe } from './boot'
 import { els } from './dom'
-import { call, isIOS } from './state'
+import { call, iosBrowser, isIOS } from './state'
 import { micMeter } from './meters'
 import { renderAudioStatus } from './status'
 import { note, sendDiagnostics } from './diagnostics'
@@ -201,9 +201,13 @@ function explainCaptureError(error: unknown): string {
   const name = (error as { name?: string } | null)?.name ?? ''
   note('getUserMedia:error', { name, message: describe(error) })
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return isIOS
-      ? 'Safari has blocked the microphone for this site. Tap “aA” in the address bar → Website Settings → Microphone → Allow, then reload.'
-      : 'The browser has blocked the microphone for this site. Allow it in the address bar, then reload.'
+    if (iosBrowser === 'Safari') {
+      return 'Safari has blocked the microphone for this site. Tap “aA” in the address bar → Website Settings → Microphone → Allow, then reload.'
+    }
+    if (iosBrowser) {
+      return `${iosBrowser} has blocked the microphone. On your iPhone open Settings → ${iosBrowser} → Microphone and turn it on, then come back, reload, and tap Allow when ${iosBrowser} asks.`
+    }
+    return 'The browser has blocked the microphone for this site. Allow it in the address bar, then reload.'
   }
   if (name === 'NotReadableError' || name === 'AbortError') return 'Another app or tab is using the microphone. Close it, then try again.'
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No microphone was found on this device.'
