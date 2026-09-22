@@ -6,6 +6,14 @@
  * used to assume success and only flip on click, which is how one side sat
  * "unmuted" while the other saw "muted". Now they follow the SDK, and a
  * microphone that is off without anyone asking gets a banner with the fix.
+ *
+ * The fix has to be a FRESH CAPTURE. The SDK's disableAudio()/enableAudio()
+ * only flip `enabled` on the track it already holds (@cloudflare/realtimekit
+ * 2.0.2: muteTrack/unmuteTrack), and a track the platform has muted —
+ * `track.muted`, which iOS sets and no page can clear — stays muted through
+ * any number of those. setDevice() stops the track and calls getUserMedia
+ * again; that is what "Fix microphone" does, and what happens on its own when
+ * a mute lasts (see recovery.ts).
  */
 
 import { describe } from './boot'
@@ -13,6 +21,9 @@ import { els } from './dom'
 import { call } from './state'
 import { micMeter } from './meters'
 import { renderAudioStatus } from './status'
+import { note, sendDiagnostics } from './diagnostics'
+import { MUTE_SETTLE_MS } from './recovery'
+import type { RtkMeeting } from './sdk'
 
 let watchedTrack: MediaStreamTrack | null = null
 
@@ -27,9 +38,17 @@ function watchTrack(track: MediaStreamTrack | null): void {
   if (track === watchedTrack) return
   watchedTrack = track
   if (!track) return
-  for (const event of ['mute', 'unmute', 'ended']) {
+  note('track', { id: track.id.slice(0, 8), label: track.label, muted: track.muted })
+  for (const event of ['mute', 'unmute', 'ended'] as const) {
     track.addEventListener(event, () => {
-      if (call.meeting?.self.audioTrack === track) syncSelfControls()
+      if (call.meeting?.self.audioTrack !== track) return
+      note(`track:${event}`, { id: track.id.slice(0, 8) })
+      if (event === 'mute') call.recovery.mutedSince ??= Date.now()
+      if (event === 'unmute') {
+        call.recovery.mutedSince = null
+        call.stuckMuted = false
+      }
+      syncSelfControls()
     })
   }
 }
@@ -43,7 +62,7 @@ export function wireSelf(): void {
   meeting.self.on('mediaPermissionError', (...args: unknown[]) => {
     const detail = args[0] as { message?: string; kind?: string } | undefined
     call.lastMediaError = detail?.message ? `${detail.kind ?? 'device'}: ${detail.message}` : 'the browser refused a device'
-    console.warn('[call] media permission error', detail)
+    note('mediaPermissionError', detail)
     syncSelfControls()
   })
 }
@@ -69,44 +88,83 @@ export function syncSelfControls(): void {
   // muted underneath it — iOS does that to the earlier capture when anything
   // captures again, and reports it as track.muted, not as "disabled".
   const trackMuted = audioOn && selfTrackMuted()
+  if (!trackMuted) call.stuckMuted = false
   const unexpected = !call.finishing && ((!audioOn && !call.selfMuted) || trackMuted)
   els.micOff.classList.toggle('hidden', !unexpected)
   if (unexpected) {
     els.micOffText.textContent = trackMuted
-      ? 'Your phone muted the microphone — the other side cannot hear you.'
+      ? call.stuckMuted
+        ? 'Your phone keeps muting the microphone. Bring this app to the front, end any other call that is using the microphone, then try again — or reload the page.'
+        : 'Your phone muted the microphone — the other side cannot hear you.'
       : call.lastMediaError
         ? `Your microphone is off (${call.lastMediaError}).`
         : 'Your microphone is off — the other side cannot hear you.'
-    els.micOffFix.textContent = trackMuted ? 'Fix microphone' : 'Turn it on'
+    els.micOffFix.textContent = trackMuted ? (call.stuckMuted ? 'Try again' : 'Fix microphone') : 'Turn it on'
   }
   renderAudioStatus()
 }
 
 /**
- * Releases and re-acquires the microphone. The newest capture is the one a
- * phone keeps live, so this is the fix for a track the platform muted.
- * Runs automatically once per call (reconcile.ts); the banner button can
- * retry as often as it likes.
+ * Releases the microphone and captures it again. The newest capture is the
+ * one a phone keeps live, so this is the fix for a track the platform muted.
+ * Runs on its own when a mute lasts (reconcile.ts, within the limits in
+ * recovery.ts); the banner button can retry as often as it likes.
  */
-export async function recoverMicrophone(): Promise<void> {
+export async function recoverMicrophone(trigger: 'auto' | 'tap'): Promise<void> {
   const meeting = call.meeting
   if (!meeting || call.recovering) return
   call.recovering = true
   els.micOffFix.disabled = true
+  const before = meeting.self.audioTrack ?? null
+  note('recover:start', { trigger, id: before?.id.slice(0, 8), muted: before?.muted })
   try {
-    await meeting.self.disableAudio()
-    await meeting.self.enableAudio()
+    // Nothing of ours may hold the capture while the new one is requested: on
+    // iOS the newest capture is the one that stays live.
+    micMeter.detach()
+    await reacquire(meeting)
     call.lastMediaError = null
-    console.info('[call] microphone re-acquired', meeting.self.audioTrack?.label)
   } catch (error) {
     call.lastMediaError = describe(error)
-    console.warn('[call] microphone recovery failed', error)
+    note('recover:error', describe(error))
   } finally {
     call.recovering = false
     els.micOffFix.disabled = false
   }
-  micMeter.attach(meeting.self.audioTrack ?? null)
+  const after = meeting.self.audioTrack ?? null
+  call.recovery.mutedSince = after && (after.muted || after.readyState === 'ended') ? Date.now() : null
+  micMeter.attach(meeting.self.audioEnabled ? after : null)
   syncSelfControls()
+
+  // Judged once iOS has had a moment: a fresh track can report muted for a
+  // few hundred milliseconds before it starts. One still muted after that is
+  // the platform holding the microphone, and the banner says so.
+  setTimeout(() => {
+    if (meeting.self.audioTrack !== after || call.finishing) return
+    const stuck = selfTrackMuted()
+    call.stuckMuted = stuck
+    note('recover:result', { trigger, id: after?.id.slice(0, 8), newTrack: after !== before, muted: after?.muted, stuck })
+    syncSelfControls()
+    if (stuck || trigger === 'tap') void sendDiagnostics(stuck ? 'still-muted' : 'recovered')
+  }, MUTE_SETTLE_MS)
+}
+
+/** A fresh capture through the SDK, so it publishes the new track itself. */
+async function reacquire(meeting: RtkMeeting): Promise<void> {
+  const current = meeting.self.getCurrentDevices().audio ?? call.microphones[0]
+  if (current) {
+    await meeting.self.setDevice({ ...current, kind: 'audioinput' })
+    return
+  }
+  // No device information at all (some browsers withhold it): capture one
+  // ourselves and hand it over. The SDK treats a handed-over track as custom
+  // and will not stop the old one, so that is done here.
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  const [fresh] = stream.getAudioTracks()
+  if (!fresh) throw new Error('no microphone track')
+  const old = meeting.self.audioTrack
+  await meeting.self.disableAudio()
+  old?.stop()
+  await meeting.self.enableAudio(fresh)
 }
 
 export async function turnMicOn(): Promise<void> {
@@ -119,9 +177,14 @@ export async function turnMicOn(): Promise<void> {
     call.lastMediaError = null
   } catch (error) {
     call.lastMediaError = describe(error)
-    console.warn('[call] enableAudio failed', error)
+    note('enableAudio:error', describe(error))
   } finally {
     els.micOffFix.disabled = false
+  }
+  if (meeting.self.audioEnabled && selfTrackMuted()) {
+    // On in the SDK's eyes, still muted by the platform: only a fresh capture helps.
+    await recoverMicrophone('tap')
+    return
   }
   micMeter.attach(meeting.self.audioTrack ?? null)
   syncSelfControls()
@@ -142,6 +205,10 @@ export async function toggleMicrophone(): Promise<void> {
     }
   } catch (error) {
     call.lastMediaError = describe(error)
+  }
+  if (meeting.self.audioEnabled && selfTrackMuted()) {
+    await recoverMicrophone('tap')
+    return
   }
   micMeter.attach(meeting.self.audioEnabled ? (meeting.self.audioTrack ?? null) : null)
   syncSelfControls()

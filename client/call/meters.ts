@@ -24,6 +24,15 @@ export function whenMetersChange(handler: () => void): void {
   onStateChange = handler
 }
 
+/**
+ * Creates the context ahead of the first capture. On iOS an AudioContext that
+ * starts after getUserMedia has been seen to mute the microphone track; one
+ * that exists first is simply resumed later, on the first tap.
+ */
+export function prepareMeters(): void {
+  context()
+}
+
 function context(): AudioContext | null {
   if (audioContext) return audioContext
   try {

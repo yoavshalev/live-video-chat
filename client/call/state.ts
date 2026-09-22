@@ -4,6 +4,7 @@
  */
 
 import type { RtkDevice, RtkMeeting, RtkParticipant } from './sdk'
+import { initialRecovery } from './recovery'
 
 export const call = {
   meeting: null as RtkMeeting | null,
@@ -24,9 +25,11 @@ export const call = {
   wantedSinkId: null as string | null,
   sinkError: null as string | null,
 
-  // Microphone recovery (see microphone.ts).
-  autoRecovered: false,
+  // Microphone recovery (see microphone.ts and recovery.ts).
+  recovery: initialRecovery(),
   recovering: false,
+  /** A fresh capture came back muted too: the platform, not us, is holding the microphone. */
+  stuckMuted: false,
 
   // What the browser offers, refreshed on devicechange.
   cameras: [] as RtkDevice[],

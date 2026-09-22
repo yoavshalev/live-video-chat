@@ -483,10 +483,14 @@ what the SDK actually has, not what was asked for: a microphone the browser
 refused, or that iOS handed over silent, shows as **off** on that person's own
 screen with a one-tap "Turn it on", instead of only as "mic off" on the other
 side. A phone that mutes the capture underneath the SDK (iOS does, whenever
-anything captures again) is caught by watching the track itself: the
-microphone is re-acquired once automatically, and if that is not enough a
-full-width "Fix microphone" banner does it on a tap. The other side is told
-what to ask for. The controls carry labels — Mute / Unmute, Camera, Share,
+anything captures again, or when Safari goes to the background) is caught by
+watching the track itself. The only cure is a fresh capture — the SDK's
+enable/disable merely flip a flag on the track it already has — so the
+microphone is re-acquired through a device switch: on its own once a mute has
+lasted a moment (at most a few times a minute), and on a tap of the full-width
+"Fix microphone" banner as often as you like. If even a fresh capture comes
+back muted, the banner says what to check on the phone, and a diagnostics
+snapshot goes to the Worker's logs. The other side is told what to ask for. The controls carry labels — Mute / Unmute, Camera, Share,
 Settings — so the button is never a guess on a phone.
 
 **Device defaults.** The camera, microphone and speaker you pick — under the

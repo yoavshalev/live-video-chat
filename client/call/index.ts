@@ -27,7 +27,7 @@
 import { els } from './dom'
 import { call } from './state'
 import { notifyParent } from './parent'
-import { resumeAudio, syncMeterLabels, whenMetersChange } from './meters'
+import { prepareMeters, resumeAudio, syncMeterLabels, whenMetersChange } from './meters'
 import { renderAudioStatus } from './status'
 import { recoverMicrophone, selfTrackMuted, turnMicOn } from './microphone'
 import { wireDevices } from './devices'
@@ -45,7 +45,7 @@ whenMetersChange(() => {
 
 wireDevices()
 wireHearButton()
-els.micOffFix.onclick = () => (call.meeting?.self.audioEnabled && selfTrackMuted() ? void recoverMicrophone() : void turnMicOn())
+els.micOffFix.onclick = () => (call.meeting?.self.audioEnabled && selfTrackMuted() ? void recoverMicrophone('tap') : void turnMicOn())
 els.leave.onclick = () => void finish('ended')
 els.retry.onclick = () => void setup()
 els.abandon.onclick = () => void finish('ended')
@@ -56,6 +56,7 @@ window.addEventListener('pagehide', () => {
   if (call.reported && !call.finishing) notifyParent('media-left')
 })
 
+prepareMeters()
 void setup()
 
 export {}

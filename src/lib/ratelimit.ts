@@ -35,6 +35,8 @@ export const LIMITS = {
   offlineMessage: { limit: 5, windowSeconds: 3600 },
   /** Exchanging a call secret for media credentials. */
   callToken: { limit: 20, windowSeconds: 300 },
+  /** Audio diagnostics from the call page. A tap on "Fix microphone" sends one. */
+  callDiagnostics: { limit: 20, windowSeconds: 300 },
   /** Analytics beacons. High, because a single page view legitimately sends several. */
   analytics: { limit: 120, windowSeconds: 60 },
   /** Host password attempts, per IP. Low on purpose. */

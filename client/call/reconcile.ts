@@ -12,6 +12,7 @@ import { call } from './state'
 import { micMeter } from './meters'
 import { recoverMicrophone, selfTrackMuted, syncSelfControls } from './microphone'
 import { syncPeerAudio } from './peer'
+import { recordAutomatic, shouldAutoRecover } from './recovery'
 import { renderAudioStatus } from './status'
 
 export function reconcileAudio(): void {
@@ -19,12 +20,19 @@ export function reconcileAudio(): void {
   if (!meeting) return
 
   const own = meeting.self.audioTrack ?? null
-  if (meeting.self.audioEnabled && own && selfTrackMuted() && !call.autoRecovered && !call.recovering) {
-    // First sight of a platform-muted track: fix it without asking, once. If
-    // the re-acquired track is muted too, the banner and its button take over.
-    call.autoRecovered = true
-    void recoverMicrophone()
-    return
+  if (meeting.self.audioEnabled && own && selfTrackMuted()) {
+    // A platform-muted track. Muted for long enough to be real, in the
+    // foreground, and not too often: fix it without asking. Otherwise the
+    // banner and its button take over.
+    const now = Date.now()
+    call.recovery.mutedSince ??= now
+    if (!call.recovering && shouldAutoRecover(call.recovery, now, document.visibilityState === 'visible')) {
+      call.recovery = recordAutomatic(call.recovery, now)
+      void recoverMicrophone('auto')
+      return
+    }
+  } else if (!call.recovering) {
+    call.recovery.mutedSince = null
   }
   micMeter.attach(meeting.self.audioEnabled ? own : null)
   syncPeerAudio()

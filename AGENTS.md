@@ -49,6 +49,12 @@ npm run deploy -- --config wrangler.<name>.local.jsonc   # migrations + deploy +
   or `visitorId` is checked against what the socket's attachment says, as
   `CALL_END` and `CALL_MEDIA_*` in `src/durable/commands.ts` do (tested in
   `test/commands.test.ts`).
+- **RealtimeKit's enableAudio()/disableAudio() do not touch the capture.** They
+  flip `enabled` on the track the SDK already holds (verified in 2.0.2). A track
+  iOS has muted (`track.muted`) stays muted through any number of them; only
+  `setDevice()`, or handing over a track from your own getUserMedia, captures
+  afresh. `client/call/microphone.ts` is built on this — do not "simplify" it
+  back to disable-then-enable.
 - **`wrangler.jsonc` is a template, and it must stay deployable untouched.**
   The "Deploy to Cloudflare" button reads it: placeholder ids get replaced,
   `workers_dev` stays true, and nothing in it may assume a hostname.

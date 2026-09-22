@@ -252,6 +252,45 @@ export function register(app: Hono<AppEnv>): void {
     return c.body(null, 204)
   })
 
+  /**
+   * Audio diagnostics from the call page: the track states and the events that
+   * led up to a "Fix microphone" tap, or to a recovery that did not help.
+   * Logged, not stored — read them in the Worker's logs (Cloudflare dashboard →
+   * Workers & Pages → founderlive → Logs, or `wrangler tail`). Authenticated
+   * the way presence is: the call secret, and for the agent seat the session.
+   */
+  app.post('/api/call/diagnostics', async (c) => {
+    const identity = await hashIp(clientIp(c.req.raw), c.env.ORG_ID)
+    const verdict = await consume(c.env, 'callDiagnostics', identity)
+    if (!verdict.allowed) return c.json({ error: 'rate limited' }, 429)
+
+    const text = await c.req.text()
+    if (text.length > 16_384) return c.json({ error: 'too large' }, 413)
+    let body: Record<string, unknown>
+    try {
+      body = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      return c.json({ error: 'invalid json' }, 400)
+    }
+
+    const callId = body.callId
+    const secret = body.secret
+    const report = body.report
+    if (!isSafeId(callId, 64) || typeof secret !== 'string' || !report || typeof report !== 'object') {
+      return c.json({ error: 'invalid request' }, 400)
+    }
+    const who = (report as { who?: unknown }).who === 'host' ? 'host' : 'visitor'
+    const agent = c.get('agent')
+    if (who === 'host' && !agent) return c.json({ error: 'unauthorized' }, 401)
+    const visitorId = isSafeId(body.visitorId, LIMITS.visitorId) ? body.visitorId : undefined
+    const check = await room(c.env).redeemCall({ callId, secret, who, visitorId, agentId: agent?.agentId })
+    if (!check.ok) return c.json({ error: check.error }, 403)
+
+    const reason = typeof body.reason === 'string' ? body.reason.slice(0, 40) : null
+    console.log('[call-diagnostics]', JSON.stringify({ callId, who, reason, ...(report as Record<string, unknown>) }))
+    return c.body(null, 204)
+  })
+
   /** Used by the dashboard's embed-snippet panel. Host-only data, so no CORS. */
   app.get('/api/sites/:siteId', async (c) => {
     if (!c.get('agent')) return c.json({ error: 'unauthorized' }, 401)

@@ -45,7 +45,8 @@ export interface RtkMeeting {
     disableVideo(): Promise<void>
     enableScreenShare(): Promise<void>
     disableScreenShare(): Promise<void>
-    enableAudio(): Promise<void>
+    /** Without a track: re-enables the one it holds. With one: publishes that track instead. */
+    enableAudio(track?: MediaStreamTrack): Promise<void>
     disableAudio(): Promise<void>
     getVideoDevices(): Promise<RtkDevice[]>
     getAudioDevices(): Promise<RtkDevice[]>
