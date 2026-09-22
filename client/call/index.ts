@@ -14,7 +14,10 @@
  *
  * Modules:
  *   lifecycle.ts   set up → join → finish
- *   microphone.ts  our own mic and camera, and recovering a muted one
+ *   capture.ts     what the SDK really holds, and a verified fresh capture
+ *   microphone.ts  our own mic and camera: intent, status, and the banner
+ *   recovery.ts    when a lost microphone is re-captured on its own (pure)
+ *   platform.ts    where we run, and the per-browser words for a blocked mic
  *   devices.ts     pickers, remembered defaults, the output device
  *   peer.ts        the other person's video, audio and screen
  *   meters.ts      level meters, reading the SDK's own tracks
@@ -29,7 +32,7 @@ import { call } from './state'
 import { notifyParent } from './parent'
 import { resumeAudio, syncMeterLabels, whenMetersChange } from './meters'
 import { renderAudioStatus } from './status'
-import { recoverMicrophone, selfTrackMuted, turnMicOn } from './microphone'
+import { ensureMicrophone } from './microphone'
 import { wireDevices } from './devices'
 import { wireHearButton } from './peer'
 import { finish, setup } from './lifecycle'
@@ -45,7 +48,10 @@ whenMetersChange(() => {
 
 wireDevices()
 wireHearButton()
-els.micOffFix.onclick = () => (call.meeting?.self.audioEnabled && selfTrackMuted() ? void recoverMicrophone('tap') : void turnMicOn())
+els.micOffFix.onclick = () => {
+  call.selfMuted = false
+  void ensureMicrophone('tap')
+}
 els.leave.onclick = () => void finish('ended')
 els.retry.onclick = () => void setup()
 els.abandon.onclick = () => void finish('ended')

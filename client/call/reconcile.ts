@@ -7,37 +7,40 @@
  * idempotent, so a reconcile that finds nothing changed does nothing.
  */
 
+import { microphoneStatus } from './capture'
 import { els } from './dom'
-import { call, isIOS } from './state'
 import { micMeter } from './meters'
-import { recoverMicrophone, selfTrackMuted, syncSelfControls } from './microphone'
+import { ensureMicrophone, syncSelfControls } from './microphone'
 import { syncPeerAudio } from './peer'
+import { isIOS } from './platform'
 import { recordAutomatic, shouldAutoRecover } from './recovery'
+import { call } from './state'
 import { renderAudioStatus } from './status'
 
 export function reconcileAudio(): void {
   const meeting = call.meeting
   if (!meeting) return
 
-  const own = meeting.self.audioTrack ?? null
-  // A track the platform muted, or one it ended — the SDK cannot revive an
-  // ended track on its own, enableAudio() only flips a flag on it — and that
-  // nobody muted on purpose.
-  if (own && !call.selfMuted && (own.muted || own.readyState === 'ended')) {
-    // Muted for long enough to be real, in the foreground, not too often, and
-    // never on iOS, where a capture belongs inside a tap: fix it without
-    // asking. Otherwise the banner and its button take over.
+  // A microphone we had and lost — muted or ended by the platform — and that
+  // nobody muted on purpose. Fixed without asking where a capture may start on
+  // its own: not on iOS, where one started outside a tap can put a permission
+  // prompt in front of somebody who did not ask for it, and a dismissed prompt
+  // is a denial for the rest of the page. There, and beyond the policy's
+  // limits, the banner and its button take over.
+  const status = microphoneStatus(meeting)
+  if (!call.selfMuted && (status === 'muted' || status === 'ended')) {
     const now = Date.now()
     call.recovery.mutedSince ??= now
     if (!call.recovering && !isIOS && shouldAutoRecover(call.recovery, now, document.visibilityState === 'visible')) {
       call.recovery = recordAutomatic(call.recovery, now)
-      void recoverMicrophone('auto')
+      void ensureMicrophone('auto')
       return
     }
   } else if (!call.recovering) {
     call.recovery.mutedSince = null
   }
-  micMeter.attach(meeting.self.audioEnabled ? own : null)
+
+  micMeter.attach(meeting.self.audioEnabled ? (meeting.self.audioTrack ?? null) : null)
   syncPeerAudio()
 
   // Cheap, and the buttons must never drift from the SDK again.

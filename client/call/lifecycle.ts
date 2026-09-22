@@ -31,6 +31,7 @@ import { playRemoteAudio, showRemoteShare, wireParticipants } from './peer'
 import { reconcileAudio } from './reconcile'
 import { wireControls } from './controls'
 import { loadPrefs } from '../shared/prefs'
+import { canCaptureAtAll } from './platform'
 
 let startedAt = 0
 let ticker: ReturnType<typeof setInterval> | null = null
@@ -42,6 +43,13 @@ export async function setup(): Promise<void> {
 
   if (!window.isSecureContext) {
     showError('Video calls need a secure (https) connection.')
+    return
+  }
+  if (!canCaptureAtAll()) {
+    // Instagram, Facebook, LinkedIn and similar in-app browsers.
+    showError('This browser cannot use the camera or microphone. Open this page in Safari or Chrome (in an app, use its menu → “Open in browser”).', {
+      newTab: true
+    })
     return
   }
   if (!framePermitsMedia()) {

@@ -1,5 +1,6 @@
 /** The full-stage overlay: getting ready, the camera check, errors, waiting for the other side. */
 
+import { allowMicrophoneHint } from './platform'
 import { boot, describe } from './boot'
 import { els } from './dom'
 import { notifyParent } from './parent'
@@ -84,9 +85,7 @@ export function handleMediaError(error: unknown): void {
   if (name === 'NotAllowedError' || /permission/i.test(describe(error))) {
     notifyParent('iframe-blocked')
     showError(
-      inFrame
-        ? 'Camera or microphone access was blocked. Allow it for this site, or open the call in its own tab.'
-        : 'Camera or microphone access was blocked. Allow it in your browser’s address bar, then try again.',
+      `Camera or microphone access was blocked. ${allowMicrophoneHint()}${inFrame ? ' Or open the call in its own tab.' : ''}`,
       { retry: true, newTab: inFrame }
     )
     return
