@@ -57,8 +57,12 @@ export async function captureMicrophone(meeting: RtkMeeting): Promise<CaptureRes
 
   if (device && !isIOS) {
     await meeting.self.setDevice({ ...device, kind: 'audioinput' })
-    if (freshLiveTrack(meeting, before)) return { ok: true }
-    note('capture:setDevice-left-no-track')
+    // The switch keeps the previous enabled state, so a track captured to
+    // replace a disabled, ended or missing one comes back disabled. That is a
+    // flag, and the SDK's own switch is the right tool for a flag.
+    if (microphoneStatus(meeting) === 'off') await meeting.self.enableAudio()
+    if (freshEnabledTrack(meeting, before)) return { ok: true }
+    note('capture:setDevice-left-nothing-usable')
   }
 
   let stream: MediaStream
@@ -79,14 +83,15 @@ export async function captureMicrophone(meeting: RtkMeeting): Promise<CaptureRes
   await meeting.self.enableAudio(fresh)
   if (old && old !== fresh) old.stop()
 
-  if (freshLiveTrack(meeting, before)) return { ok: true }
+  if (freshEnabledTrack(meeting, before)) return { ok: true }
   fresh.stop()
   return { ok: false, reason: 'The call could not switch to the new microphone.' }
 }
 
-function freshLiveTrack(meeting: RtkMeeting, before: MediaStreamTrack | null): boolean {
+/** A live track the SDK did not have before, and one it is actually publishing. */
+function freshEnabledTrack(meeting: RtkMeeting, before: MediaStreamTrack | null): boolean {
   const track = meeting.self.audioTrack
-  return Boolean(track && track !== before && track.readyState === 'live')
+  return Boolean(track && track !== before && track.readyState === 'live' && meeting.self.audioEnabled)
 }
 
 /** What a refused getUserMedia means, in words that say what to do about it, here. */
