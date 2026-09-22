@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: ["enhancement", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Before you write one up, please glance at
+        [**Not built, on purpose**](https://github.com/yoavshalev/live-video-chat/blob/main/README.md#not-built-on-purpose) in the README —
+        the project stays small deliberately, and those items need a design discussion first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Start with the situation, not the solution. Who hits this, and how often?
+      placeholder: "When two agents are live, visitors from our pricing page wait behind support questions…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds you've tried
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to build it?
+      options:
+        - Yes, I'd like to open a PR
+        - Maybe, with some guidance
+        - No, just suggesting
+    validations:
+      required: true
