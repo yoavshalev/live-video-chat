@@ -71,6 +71,13 @@ export function wireSelf(): void {
 export function syncSelfControls(): void {
   const meeting = call.meeting
   if (!meeting) return
+  if (call.recovering) {
+    // Mid re-capture the SDK holds no track for a moment. The buttons and the
+    // banner keep saying what they said, rather than flashing "off" and back;
+    // recoverMicrophone() syncs once the new track is in.
+    renderAudioStatus()
+    return
+  }
   const audioOn = meeting.self.audioEnabled
   const videoOn = meeting.self.videoEnabled
   els.mic.classList.toggle('off', !audioOn)
