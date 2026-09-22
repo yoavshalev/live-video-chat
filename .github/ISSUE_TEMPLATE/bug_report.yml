@@ -1,0 +1,97 @@
+name: Bug report
+description: Something doesn't work the way the README says it should
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+        **Security problem?** Don't file it here — use [private reporting](https://github.com/yoavshalev/live-video-chat/security/advisories/new) instead.
+        **Setup or "how do I" question?** [Discussions](https://github.com/yoavshalev/live-video-chat/discussions) is the faster place.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Widget (on the customer's site)
+        - The call (video / audio / screen share)
+        - Dashboard
+        - Deployment / Deploy button / migrations
+        - Agent CLI
+        - Docs
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go live on the dashboard
+        2. Open the widget on Safari (iOS 18) and join the queue
+        3. Accept the call
+        4. Visitor's microphone shows as muted
+    validations:
+      required: true
+
+  - type: input
+    id: visitor-env
+    attributes:
+      label: Visitor's device and browser
+      placeholder: "iPhone 15, iOS 18.4, Safari"
+
+  - type: input
+    id: agent-env
+    attributes:
+      label: Agent's device and browser
+      placeholder: "MacBook, macOS 15, Chrome 140"
+
+  - type: dropdown
+    id: env
+    attributes:
+      label: Where is it running?
+      options:
+        - Local (npm run dev)
+        - Deployed with the Deploy button
+        - Deployed by hand
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or date you deployed
+      description: "`git rev-parse --short HEAD`, or roughly when you deployed."
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output, `wrangler tail` logs, or call diagnostics
+      description: Remove emails, names, domains and tokens first.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
+      description: A screenshot or short screen recording helps a lot.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I removed personal data and secrets from everything above.
+          required: true
