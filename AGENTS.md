@@ -53,8 +53,10 @@ npm run deploy -- --config wrangler.<name>.local.jsonc   # migrations + deploy +
   flip `enabled` on the track the SDK already holds (verified in 2.0.2). A track
   iOS has muted (`track.muted`) stays muted through any number of them; only
   `setDevice()`, or handing over a track from your own getUserMedia, captures
-  afresh. `client/call/microphone.ts` is built on this — do not "simplify" it
-  back to disable-then-enable.
+  afresh. `client/call/capture.ts` is built on this (status read off the
+  track, every capture verified) and `microphone.ts` has one path that turns
+  a microphone on — do not "simplify" it back to disable-then-enable, and do
+  not start a capture on iOS outside a tap.
 - **`wrangler.jsonc` is a template, and it must stay deployable untouched.**
   The "Deploy to Cloudflare" button reads it: placeholder ids get replaced,
   `workers_dev` stays true, and nothing in it may assume a hostname.
