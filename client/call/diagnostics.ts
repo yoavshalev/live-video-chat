@@ -51,7 +51,7 @@ export function snapshot(): Record<string, unknown> {
 }
 
 export function sendDiagnostics(reason: string): Promise<void> {
-  const body = JSON.stringify({ callId: boot.callId, secret: boot.secret, visitorId: boot.visitorId, reason, report: snapshot() })
+  const body = JSON.stringify({ callId: boot.callId, secret: boot.secret, who: boot.who, visitorId: boot.visitorId, reason, report: snapshot() })
   return fetch('/api/call/diagnostics', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -12,6 +12,7 @@
  * founder" costs more conversions than the abuse costs us today.
  */
 
+import { sanitizeCallReport } from '../lib/call-diagnostics'
 import { publicBaseUrl } from '../lib/base-url'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -275,19 +276,19 @@ export function register(app: Hono<AppEnv>): void {
 
     const callId = body.callId
     const secret = body.secret
-    const report = body.report
-    if (!isSafeId(callId, 64) || typeof secret !== 'string' || !report || typeof report !== 'object') {
-      return c.json({ error: 'invalid request' }, 400)
-    }
-    const who = (report as { who?: unknown }).who === 'host' ? 'host' : 'visitor'
+    const report = sanitizeCallReport(body.report)
+    if (!isSafeId(callId, 64) || typeof secret !== 'string' || !report) return c.json({ error: 'invalid request' }, 400)
+    const who = body.who === 'host' ? 'host' : 'visitor'
     const agent = c.get('agent')
     if (who === 'host' && !agent) return c.json({ error: 'unauthorized' }, 401)
     const visitorId = isSafeId(body.visitorId, LIMITS.visitorId) ? body.visitorId : undefined
     const check = await room(c.env).redeemCall({ callId, secret, who, visitorId, agentId: agent?.agentId })
     if (!check.ok) return c.json({ error: check.error }, 403)
 
+    // Known fields only, each bounded, and the verified ones written last so
+    // nothing in the report can pose as them in the log.
     const reason = typeof body.reason === 'string' ? body.reason.slice(0, 40) : null
-    console.log('[call-diagnostics]', JSON.stringify({ callId, who, reason, ...(report as Record<string, unknown>) }))
+    console.log('[call-diagnostics]', JSON.stringify({ ...report, callId, who, reason }))
     return c.body(null, 204)
   })
 

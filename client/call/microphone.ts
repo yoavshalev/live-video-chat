@@ -122,20 +122,23 @@ export async function recoverMicrophone(trigger: 'auto' | 'tap'): Promise<void> 
   if (!meeting || call.recovering) return
   call.recovering = true
   els.micOffFix.disabled = true
+  // The mute button too: a tap mid re-capture would race the SDK.
+  els.mic.disabled = true
   const before = meeting.self.audioTrack ?? null
   note('recover:start', { trigger, id: before?.id.slice(0, 8), muted: before?.muted })
   try {
     // Nothing of ours may hold the capture while the new one is requested: on
     // iOS the newest capture is the one that stays live.
     micMeter.detach()
-    await reacquire(meeting)
-    call.lastMediaError = null
+    if (await reacquire(meeting, before)) call.lastMediaError = null
+    else call.lastMediaError ??= 'no microphone could be captured'
   } catch (error) {
     call.lastMediaError = describe(error)
     note('recover:error', describe(error))
   } finally {
     call.recovering = false
     els.micOffFix.disabled = false
+    els.mic.disabled = false
   }
   const after = meeting.self.audioTrack ?? null
   call.recovery.mutedSince = after && (after.muted || after.readyState === 'ended') ? Date.now() : null
@@ -155,28 +158,40 @@ export async function recoverMicrophone(trigger: 'auto' | 'tap'): Promise<void> 
   }, MUTE_SETTLE_MS)
 }
 
-/** A fresh capture through the SDK, so it publishes the new track itself. */
-async function reacquire(meeting: RtkMeeting): Promise<void> {
+/**
+ * A fresh capture, preferably through the SDK so it publishes the new track
+ * itself. True when the SDK ended up with a live track it did not have before.
+ */
+async function reacquire(meeting: RtkMeeting, before: MediaStreamTrack | null): Promise<boolean> {
   const current = meeting.self.getCurrentDevices().audio ?? call.microphones[0]
   if (current) {
+    // The SDK's setDevice() swallows a failed capture rather than throwing, so
+    // the outcome is checked, never assumed.
     await meeting.self.setDevice({ ...current, kind: 'audioinput' })
-    return
+    if (freshLiveTrack(meeting.self.audioTrack, before)) return true
+    note('recover:setDevice-left-no-track')
   }
-  // No device information at all (some browsers withhold it): capture one
-  // ourselves and hand it over. The SDK treats a handed-over track as custom
-  // and will not stop the old one, so that is done here.
+  // Capture one ourselves and hand it over. Order matters: the SDK treats a
+  // handed-over track as custom and never stops the old one, and stopping it
+  // before the SDK has let go would fire the SDK's own "ended" handler, which
+  // captures yet another track behind our back.
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
   const [fresh] = stream.getAudioTracks()
-  if (!fresh) throw new Error('no microphone track')
-  const old = meeting.self.audioTrack
+  if (!fresh) return false
+  const old = meeting.self.audioTrack ?? null
   await meeting.self.disableAudio()
-  old?.stop()
   await meeting.self.enableAudio(fresh)
+  if (old && old !== fresh) old.stop()
+  return freshLiveTrack(meeting.self.audioTrack, before)
+}
+
+function freshLiveTrack(track: MediaStreamTrack | null | undefined, before: MediaStreamTrack | null): boolean {
+  return Boolean(track && track !== before && track.readyState === 'live')
 }
 
 export async function turnMicOn(): Promise<void> {
   const meeting = call.meeting
-  if (!meeting) return
+  if (!meeting || call.recovering) return
   call.selfMuted = false
   els.micOffFix.disabled = true
   try {
@@ -200,7 +215,7 @@ export async function turnMicOn(): Promise<void> {
 /** The mute button: a deliberate mute is remembered, so the banner stays quiet. */
 export async function toggleMicrophone(): Promise<void> {
   const meeting = call.meeting
-  if (!meeting) return
+  if (!meeting || call.recovering) return
   try {
     if (meeting.self.audioEnabled) {
       call.selfMuted = true
