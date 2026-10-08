@@ -102,6 +102,21 @@ function wranglerRun(wranglerArgs) {
 }
 
 /**
+ * Like wranglerRun, with one retry. Cloudflare's API occasionally answers a
+ * D1 call with "account not authorized" (code 7403) for a moment and then
+ * works; a deploy should not fall over on that.
+ */
+function wranglerRunWithRetry(wranglerArgs, attempts = 2) {
+  for (let attempt = 1; ; attempt++) {
+    const result = spawnSync(process.execPath, [wrangler, ...wranglerArgs, ...target], { stdio: 'inherit' })
+    if (result.status === 0) return
+    if (attempt >= attempts) process.exit(result.status ?? 1)
+    console.warn(`\nAttempt ${attempt} failed; trying once more in 3 seconds.`)
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000)
+  }
+}
+
+/**
  * Runs wrangler and returns its stdout, or null if it failed. Only stdout:
  * wrangler puts warnings such as "[ERROR] Failed to write to log file" on
  * stderr while still exiting 0, and a bracket from one of those inside what we
@@ -119,7 +134,7 @@ run(windows ? 'npm.cmd' : 'npm', ['run', inWorkersBuilds ? 'build' : 'check'], {
 
 step('D1 migrations')
 if (dryRun) console.log('Dry run: not applied.')
-else wranglerRun(['d1', 'migrations', 'apply', 'DB', '--remote'])
+else wranglerRunWithRetry(['d1', 'migrations', 'apply', 'DB', '--remote'])
 
 step(dryRun ? 'Deploy (dry run)' : 'Deploy')
 wranglerRun(['deploy', ...deployOnly])
