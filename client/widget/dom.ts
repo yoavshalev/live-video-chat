@@ -74,5 +74,7 @@ export const ICONS = {
   close: 'M18 6 6 18M6 6l12 12',
   chevronDown: 'm6 9 6 6 6-6',
   soundOn: 'M11 5 6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07',
-  soundOff: 'M11 5 6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6'
+  soundOff: 'M11 5 6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6',
+  /** A video camera: the bubble wears it so nobody mistakes this for a chat. */
+  video: 'M23 7l-7 5 7 5V7zM3 5h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'
 } as const

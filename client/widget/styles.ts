@@ -74,6 +74,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--fl-muted);
 }
 
+.avatar-wrap { position: relative; flex: none; display: grid; }
+.video-badge {
+  position: absolute; left: -5px; bottom: -4px; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--fl-accent); color: #fff; display: grid; place-items: center;
+  box-shadow: 0 0 0 2px var(--fl-bg);
+}
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--fl-muted); }
 .dot.available { background: var(--fl-live); animation: fl-pulse 2.4s infinite; }
 .dot.busy, .dot.paused { background: var(--fl-busy); }

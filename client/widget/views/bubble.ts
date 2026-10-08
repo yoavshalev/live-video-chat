@@ -2,7 +2,7 @@
 
 import type { Widget } from '../widget'
 import { COPY, withName } from '../../../src/config'
-import { el } from '../dom'
+import { ICONS, el, icon } from '../dom'
 
 export function renderBubble(w: Widget): HTMLElement {
   const status = w.statusOf()
@@ -17,12 +17,20 @@ export function renderBubble(w: Widget): HTMLElement {
     class: 'bubble',
     attrs: {
       type: 'button',
-      'aria-label': status === 'offline' ? `${w.name()} is offline — leave a question` : label,
+      'aria-label': status === 'offline' ? `${w.name()} is offline — leave a question` : `${label} — video call`,
       'aria-haspopup': 'dialog'
     },
     on: { click: () => w.open() },
     children: [
-      renderAvatar(w),
+      // The camera badge on the avatar is what says "video" at a glance. Not
+      // when offline: that bubble leads to a message form, not a call.
+      el('span', {
+        class: 'avatar-wrap',
+        children: [
+          renderAvatar(w),
+          status === 'offline' ? null : el('span', { class: 'video-badge', attrs: { 'aria-hidden': 'true' }, children: [icon(ICONS.video, 9)] })
+        ]
+      }),
       el('span', { class: `dot ${status}`, attrs: { 'aria-hidden': 'true' } }),
       el('span', { class: 'label', text: label }),
       status === 'busy' && waiting > 0
