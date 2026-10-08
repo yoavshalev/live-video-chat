@@ -14,7 +14,7 @@ export function renderBubble(w: Widget): HTMLElement {
   else label = withName(COPY.liveCta, w.name())
 
   return el('button', {
-    class: 'bubble',
+    class: status === 'offline' ? 'bubble' : 'bubble has-video',
     attrs: {
       type: 'button',
       'aria-label': status === 'offline' ? `${w.name()} is offline — leave a question` : `${label} — video call`,
@@ -22,20 +22,17 @@ export function renderBubble(w: Widget): HTMLElement {
     },
     on: { click: () => w.open() },
     children: [
-      // The camera badge on the avatar is what says "video" at a glance. Not
-      // when offline: that bubble leads to a message form, not a call.
-      el('span', {
-        class: 'avatar-wrap',
-        children: [
-          renderAvatar(w),
-          status === 'offline' ? null : el('span', { class: 'video-badge', attrs: { 'aria-hidden': 'true' }, children: [icon(ICONS.video, 9)] })
-        ]
-      }),
+      renderAvatar(w),
       el('span', { class: `dot ${status}`, attrs: { 'aria-hidden': 'true' } }),
       el('span', { class: 'label', text: label }),
       status === 'busy' && waiting > 0
         ? el('span', { class: 'count', text: `· ${waiting} waiting` })
-        : null
+        : null,
+      // The camera at the end is what says "video" at a glance: a call button
+      // on the pill. Not when offline — that bubble leads to a message form.
+      status === 'offline'
+        ? null
+        : el('span', { class: 'video-cta', attrs: { 'aria-hidden': 'true' }, children: [icon(ICONS.video, 13)] })
     ]
   })
 }
